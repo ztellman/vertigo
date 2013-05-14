@@ -7,7 +7,8 @@
     [java.io
      InputStream]
     [java.nio
-     ByteBuffer]
+     ByteBuffer
+     ByteOrder]
     [vertigo.utils
      Primitives]
     [java.util.concurrent.atomic
@@ -150,21 +151,22 @@
 
 (defn chunked-buffer
   ([^ByteBuffer buf next]
-     (ChunkedBuffer. buf 0 (.remaining buf) next))
+     (ChunkedBuffer. (doto ^ByteBuffer buf (.order (ByteOrder/nativeOrder))) 0 (.remaining buf) next))
   ([^ByteBuffer buf next close-fn]
-     (CloseableChunkedBuffer. buf 0 (.remaining buf) next close-fn)))
+     (CloseableChunkedBuffer. (doto ^ByteBuffer buf (.order (ByteOrder/nativeOrder))) 0 (.remaining buf) next close-fn)))
 
 (defn buffer
   ([buf]
-     (Buffer. buf 0))
+     (Buffer. (doto ^ByteBuffer buf (.order (ByteOrder/nativeOrder))) 0))
   ([buf close-fn]
-     (CloseableBuffer. buf 0 close-fn)))
+     (CloseableBuffer. (doto ^ByteBuffer buf (.order (ByteOrder/nativeOrder))) 0 close-fn)))
 
 (defn array->buffer
   ([ary]
      (array->buffer ary 0 (Array/getLength ^bytes ary)))
   ([ary ^long offset ^long length]
-    (let [buf (ByteBuffer/allocate length)]
+     (let [buf (doto (ByteBuffer/allocate length)
+                 (.order (ByteOrder/nativeOrder)))]
       (.put buf ary offset length)
       (.position buf 0)
       buf)))
@@ -173,10 +175,11 @@
   ([ary]
      (array->buffer ary 0 (Array/getLength ^bytes ary)))
   ([ary ^long offset ^long length]
-    (let [buf (ByteBuffer/allocateDirect length)]
-      (.put buf ary offset length)
-      (.position buf 0)
-      buf)))
+     (let [buf (doto (ByteBuffer/allocateDirect length)
+                 (.order (ByteOrder/nativeOrder)))]
+       (.put buf ary offset length)
+       (.position buf 0)
+       buf)))
 
 (defn input-stream->chunked-buffer
   [^InputStream input-stream ^long chunk-size]

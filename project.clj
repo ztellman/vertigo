@@ -7,6 +7,10 @@
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
                                   [org.clojure/clojure "1.5.1"]]}}
   :warn-on-reflection true
+  :test-selectors {:default #(not (some #{:benchmark}
+                                        (cons (:tag %) (keys %))))
+                   :benchmark :benchmark
+                   :all (constantly true)}
   :jvm-opts ^:replace ["-server"]
   :java-source-paths ["src"]
   :javac-options ["-target" "1.5" "-source" "1.5"]

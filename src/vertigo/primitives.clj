@@ -1,6 +1,6 @@
 (ns vertigo.primitives
   (:refer-clojure
-    :exclude [* + - / < > <= >= == byte short int inc dec zero?])
+    :exclude [* + - / < > <= >= == byte short int float inc dec zero?])
   (:require
     [robert.hooke :as hooke])
   (:import
@@ -52,7 +52,7 @@
 ;;;
 
 (def ^:private vars-to-exclude
-  '[* + - / < > <= >= == byte short int && || &&' ||' inc dec zero?])
+  '[* + - / < > <= >= == byte short int float && || &&' ||' inc dec zero?])
 
 (defn- using-primitive-operators? []
   (= #'vertigo.primitives/+ (resolve '+)))
@@ -109,6 +109,11 @@
   "Truncates a number to an int32."
   ^long [^long x]
   (long (Primitives/toInteger x)))
+
+(defn float
+  "Truncates a number to a float32."
+  ^double [^double x]
+  (double (Primitives/toFloat x)))
 
 ;;;
 

@@ -2,13 +2,16 @@
   (:use
     clojure.test)
   (:require
+    [criterium.core :as c]
     [vertigo.buffer :as b]
+    [vertigo.primitives :as p]
     [clojure.java.io :as io])
   (:import
     [java.io
      ByteArrayInputStream]
     [java.nio
-     ByteBuffer]
+     ByteBuffer
+     ByteOrder]
     [vertigo.buffer
      Buffer]))
 
@@ -75,3 +78,16 @@
                    (range 10)))))
 
       )))
+
+;;;
+
+(deftest ^:benchmark benchmark-buffer
+  (let [byte-buf (doto (ByteBuffer/allocate 8)
+                   (.order (ByteOrder/nativeOrder)))
+        buf (b/buffer byte-buf)]
+    (c/quick-bench
+      (dotimes [_ 1e3]
+        (.putLong byte-buf 0 (p/inc (.getLong byte-buf 0)))))
+    (c/quick-bench
+      (dotimes [_ 1e3]
+        (b/put-long buf 0 (p/inc (b/get-long buf 0)))))))

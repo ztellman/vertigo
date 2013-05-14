@@ -2,6 +2,7 @@
   (:use
     clojure.test)
   (:require
+    [criterium.core :as c]
     [vertigo.primitives :as p]))
 
 (def primitive-ops
@@ -50,3 +51,5 @@
       (== 3.0 (+ 1 2.0))))
 
   )
+
+;;;

@@ -63,8 +63,7 @@
   (let [buf (doto (ByteBuffer/allocateDirect 8)
               (.order (ByteOrder/nativeOrder)))]
     (bench "get/put direct"
-      (dotimes [_ 1e3]
-        (.putLong buf 0 (Primitives/add 1 (.getLong buf 0))))))
+      (.putLong buf 0 (Primitives/add 1 (.getLong buf 0)))))
 )
 
 

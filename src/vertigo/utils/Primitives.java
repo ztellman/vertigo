@@ -14,6 +14,10 @@ public class Primitives {
         return (int) n;
     }
 
+    public static float toFloat(double n) {
+        return (float) n;
+    }
+
     public static short reverseShort(long n) {
         return (short) (((short) n << 8) 
                         | ((char) n >>> 8));
