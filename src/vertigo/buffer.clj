@@ -27,154 +27,171 @@
   (get-float ^double [_ ^long idx])
   (get-double ^double [_ ^long idx])
   
-  (put-byte ^void [_ ^long idx ^long val])
-  (put-short ^void [_ ^long idx ^long val])
-  (put-int ^void [_ ^long idx ^long val])
-  (put-long ^void [_ ^long idx ^long val])
-  (put-float ^void [_ ^long idx ^double val])
-  (put-double ^void [_ ^long idx ^double val]))
+  (put-byte [_ ^long idx ^long val])
+  (put-short [_ ^long idx ^long val])
+  (put-int [_ ^long idx ^long val])
+  (put-long [_ ^long idx ^long val])
+  (put-float [_ ^long idx ^double val])
+  (put-double [_ ^long idx ^double val])
 
-(defmacro ^:private loop-and-get [this idx f]
+  (drop-bytes [_ ^long n]))
+
+(defmacro ^:private loop-and-get [this offset idx f]
   `(loop [chunk# ~this, idx# (long ~idx)]
      (let [next# (.next chunk#)
-           next# (and next# @next#)]
-       (if (or (not next#) (< idx# (.size chunk#)))
-         (~f (.buf chunk#) idx#)
-         (recur next#
-           (- (long idx#) (.size chunk#)))))))
+           next# (and next# @next#)
+           idx'# (+ idx# ~offset)
+           size# (.size chunk#)]
+       (if (or (not next#) (< idx'# size#))
+         (~f ^ByteBuffer (.buf chunk#) idx'#)
+         (recur next# (- (long idx#) size#))))))
 
-(defmacro ^:private loop-and-put [this idx val f]
+(defmacro ^:private loop-and-put [this offset idx val f]
   `(loop [chunk# ~this, idx# (long ~idx)]
      (let [next# (.next chunk#)
-           next# (and next# @next#)]
-       (if (or (not next#) (< idx# (.size chunk#)))
-         (~f (.buf chunk#) idx# ~val)
-         (recur next#
-           (- (long idx#) (.size chunk#)))))))
+           next# (and next# @next#)
+           idx'# (+ idx# ~offset)
+           size# (.size chunk#)]
+       (if (or (not next#) (< idx'# size#))
+         (~f ^ByteBuffer (.buf chunk#) idx'# ~val)
+         (recur next# (- (long idx#) size#))))))
 
-(def-abstract-type ABuffer [buf]
+(def-abstract-type ABuffer [buf offset]
   IBuffer
-  (get-byte [this idx]   (long (.get buf idx)))
-  (get-short [this idx]  (long (.getShort buf idx)))
-  (get-int [this idx]    (long (.getInt buf idx)))
-  (get-long [this idx]   (.getLong buf idx))
-  (get-float [this idx]  (double (.getFloat buf idx)))
-  (get-double [this idx] (.getDouble buf idx))
+  (get-byte [this idx]   (long (.get buf (+ offset idx))))
+  (get-short [this idx]  (long (.getShort buf (+ offset idx))))
+  (get-int [this idx]    (long (.getInt buf (+ offset idx))))
+  (get-long [this idx]   (.getLong buf (+ offset idx)))
+  (get-float [this idx]  (double (.getFloat buf (+ offset idx))))
+  (get-double [this idx] (.getDouble buf (+ offset idx)))
 
-  (put-byte [this idx val]   (.put buf idx val))
-  (put-short [this idx val]  (.putShort buf idx val))
-  (put-int [this idx val]    (.putInt buf idx val))
-  (put-long [this idx val]   (.putLong buf idx val))
-  (put-float [this idx val]  (.putFloat buf idx val))
-  (put-double [this idx val] (.putDouble buf idx val)))
+  (put-byte [this idx val]   (.put buf (+ offset idx) val))
+  (put-short [this idx val]  (.putShort buf (+ offset idx) val))
+  (put-int [this idx val]    (.putInt buf (+ offset idx) val))
+  (put-long [this idx val]   (.putLong buf (+ offset idx) val))
+  (put-float [this idx val]  (.putFloat buf (+ offset idx) val))
+  (put-double [this idx val] (.putDouble buf (+ offset idx) val)))
 
-(def-abstract-type ABufferChunk [buf size next]
+(def-abstract-type ABufferChunk [buf offset size next]
   IBuffer
-  (get-byte [this idx]   (loop-and-get this idx .get))
-  (get-short [this idx]  (loop-and-get this idx .getShort))
-  (get-int [this idx]    (loop-and-get this idx .getInt))
-  (get-long [this idx]   (loop-and-get this idx .getLong))
-  (get-float [this idx]  (loop-and-get this idx .getFloat))
-  (get-double [this idx] (loop-and-get this idx .getDouble))
+  (get-byte [this idx]   (long (loop-and-get this offset idx .get)))
+  (get-short [this idx]  (long (loop-and-get this offset idx .getShort)))
+  (get-int [this idx]    (long (loop-and-get this offset idx .getInt)))
+  (get-long [this idx]   (loop-and-get this offset idx .getLong))
+  (get-float [this idx]  (double (loop-and-get this offset idx .getFloat)))
+  (get-double [this idx] (double (loop-and-get this offset idx .getDouble)))
 
-  (put-byte [this idx val]   (loop-and-put this idx val .put))
-  (put-short [this idx val]  (loop-and-put this idx val .putShort))
-  (put-int [this idx val]    (loop-and-put this idx val .putInt))
-  (put-long [this idx val]   (loop-and-put this idx val .putLong))
-  (put-float [this idx val]  (loop-and-put this idx val .putFloat))
-  (put-double [this idx val] (loop-and-put this idx val .putDouble))
-
-  clojure.lang.ISeq
-  (first [this] this)
-  (next [_] (when next @next))
-  (more [this]
-    (if-let [n (next this)]
-      n
-      '()))
-
-  clojure.lang.Seqable
-  (seq [this] this))
+  (put-byte [this idx val]   (loop-and-put this offset idx val .put))
+  (put-short [this idx val]  (loop-and-put this offset idx val .putShort))
+  (put-int [this idx val]    (loop-and-put this offset idx val .putInt))
+  (put-long [this idx val]   (loop-and-put this offset idx val .putLong))
+  (put-float [this idx val]  (loop-and-put this offset idx val .putFloat))
+  (put-double [this idx val] (loop-and-put this offset idx val .putDouble)))
 
 (deftype+ Buffer
-  [^ByteBuffer buf]
-  ABuffer)
+  [^ByteBuffer buf
+   ^long offset]
+  ABuffer
+  (drop-bytes [_ n]
+    (let [idx' (+ offset n)]
+      (when (<= idx' (.remaining buf))
+        (Buffer. buf idx')))))
 
 (deftype+ CloseableBuffer
   [^ByteBuffer buf
-   ^AtomicBoolean latch
+   ^long offset
    close-fn]
   ABuffer
   java.io.Closeable
   (close [_]
-    (when (.compareAndSet latch false true)
-      (close-fn))))
+    (close-fn))
+  (drop-bytes [_ n]
+    (let [idx' (+ offset n)]
+      (when (<= idx' (.remaining buf))
+        (CloseableBuffer. buf idx' close-fn)))))
 
-(deftype+ BufferChunk
+(defmacro ^:private loop-and-drop [this to-drop constructor]
+  (unify-gensyms
+    `(loop [chunk## ~this, to-drop# ~to-drop]
+       (let [idx'## (+ (.offset chunk##) to-drop#)]
+         (if (<= (.size chunk##) idx'##)
+           (let [next# (.next chunk##)]
+             (when-let [next# (and next# @next#)]
+               (recur next# (- to-drop# (- (.size chunk##) (.offset chunk##))))))
+           ~((eval constructor) `chunk## `idx'##))))))
+
+(deftype+ ChunkedBuffer
   [^ByteBuffer buf
+   ^long offset
    ^long size
    next]
-  ABufferChunk)
+  ABufferChunk
+  (drop-bytes [this n]
+    (loop-and-drop this n
+      (fn [chunk idx]
+        `(ChunkedBuffer. (.buf ~chunk) ~idx (.size ~chunk) (.next ~chunk))))))
 
-(deftype+ CloseableBufferChunk
+(deftype+ CloseableChunkedBuffer
   [^ByteBuffer buf
+   ^long offset
    ^long size
    next
-   ^AtomicBoolean latch
    close-fn]
   ABufferChunk
   java.io.Closeable
   (close [_]
-    (when (.compareAndSet latch false true)
-      (close-fn))))
+    (close-fn))
+  (drop-bytes [this n]
+    (loop-and-drop this n
+      (fn [chunk idx]
+        `(CloseableChunkedBuffer. (.buf ~chunk) ~idx (.size ~chunk) (.next ~chunk) (.close-fn ~chunk))))))
 
 ;;;
 
 (defn chunked-buffer
   ([^ByteBuffer buf next]
-     (BufferChunk. buf (.remaining buf) next))
+     (ChunkedBuffer. buf 0 (.remaining buf) next))
   ([^ByteBuffer buf next close-fn]
-     (CloseableBufferChunk. buf (.remaining buf) next (AtomicBoolean. false) close-fn)))
+     (CloseableChunkedBuffer. buf 0 (.remaining buf) next close-fn)))
 
 (defn buffer
-  ([^ByteBuffer buf]
-     (Buffer. buf))
-  ([^ByteBuffer buf close-fn]
-     (CloseableBuffer. buf (AtomicBoolean. false) close-fn)))
+  ([buf]
+     (Buffer. buf 0))
+  ([buf close-fn]
+     (CloseableBuffer. buf 0 close-fn)))
 
 (defn array->buffer
-  (^ByteBuffer [ary]
+  ([ary]
      (array->buffer ary 0 (Array/getLength ^bytes ary)))
-  (^ByteBuffer [ary ^long offset ^long length]
+  ([ary ^long offset ^long length]
     (let [buf (ByteBuffer/allocate length)]
       (.put buf ary offset length)
       (.position buf 0)
       buf)))
 
 (defn array->direct-buffer
-  (^ByteBuffer [ary]
+  ([ary]
      (array->buffer ary 0 (Array/getLength ^bytes ary)))
-  (^ByteBuffer [ary ^long offset ^long length]
+  ([ary ^long offset ^long length]
     (let [buf (ByteBuffer/allocateDirect length)]
       (.put buf ary offset length)
       (.position buf 0)
       buf)))
 
-(def ^:private ^Class byte-array-class (Class/forName "[B"))
-
 (defn input-stream->chunked-buffer
   [^InputStream input-stream ^long chunk-size]
   (let [close-fn #(.close input-stream)
         read-chunk (fn read-chunk []
-                     (let [ary (Array/newInstance byte-array-class chunk-size)]
+                     (let [ary (Array/newInstance Byte/TYPE chunk-size)]
                        (loop [offset 0]
                          (let [len (.read input-stream ary offset (- chunk-size offset))
                                offset (+ offset len)]
                            (cond
                              (== -1 len)
-                             (chunked-buffer (array->buffer ary 0 offset) nil close-fn)
+                             (chunked-buffer (array->buffer ary 0 (+ offset 1)) nil close-fn)
 
                              (== chunk-size len)
-                             (chunked-buffer (array->buffer ary 0 offset) read-chunk close-fn)
+                             (chunked-buffer (array->buffer ary 0 offset) (delay (read-chunk)) close-fn)
 
                              :else
                              (recur offset))))))]

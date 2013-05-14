@@ -1,6 +1,6 @@
 (ns vertigo.primitives
   (:refer-clojure
-    :exclude [* + - / < > == byte short int])
+    :exclude [* + - / < > <= >= == byte short int inc dec zero?])
   (:require
     [robert.hooke :as hooke])
   (:import
@@ -34,13 +34,25 @@
 (variadic-proxy &&'  vertigo.utils.Primitives/bitAnd)
 (variadic-proxy ||'  vertigo.utils.Primitives/bitOr)
 
-(variadic-predicate-proxy >  vertigo.utils.Primitives/gt)
-(variadic-predicate-proxy <  vertigo.utils.Primitives/lt)
-(variadic-predicate-proxy == vertigo.utils.Primitives/eq)
+(variadic-predicate-proxy >   vertigo.utils.Primitives/gt)
+(variadic-predicate-proxy <   vertigo.utils.Primitives/lt)
+(variadic-predicate-proxy <=  vertigo.utils.Primitives/lte)
+(variadic-predicate-proxy >=  vertigo.utils.Primitives/gte)
+(variadic-predicate-proxy ==  vertigo.utils.Primitives/eq)
+
+(defmacro inc [x]
+  `(Primitives/inc ~x))
+
+(defmacro dec [x]
+  `(Primitives/dec ~x))
+
+(defmacro zero? [x]
+  `(Primitives/isZero ~x))
 
 ;;;
 
-(def ^:private vars-to-exclude '[* + - / < > == byte short int && || &&' ||'])
+(def ^:private vars-to-exclude
+  '[* + - / < > <= >= == byte short int && || &&' ||' inc dec zero?])
 
 (defn- using-primitive-operators? []
   (= #'vertigo.primitives/+ (resolve '+)))

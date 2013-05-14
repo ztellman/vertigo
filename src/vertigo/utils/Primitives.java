@@ -87,12 +87,28 @@ public class Primitives {
         return a < b;
     }
 
+    public static boolean lte(double a, double b) {
+        return a <= b;
+    }
+
+    public static boolean lte(long a, long b) {
+        return a <= b;
+    }
+
     public static boolean gt(long a, long b) {
         return a > b;
     }
 
     public static boolean gt(double a, double b) {
         return a > b;
+    }
+
+    public static boolean gte(long a, long b) {
+        return a >= b;
+    }
+
+    public static boolean gte(double a, double b) {
+        return a >= b;
     }
 
     public static boolean eq(long a, long b) {
@@ -104,6 +120,30 @@ public class Primitives {
     }
 
     ////
+
+    public static long inc(long n) {
+        return n + 1;
+    }
+
+    public static double inc(double n) {
+        return n + 1.0;
+    }
+
+    public static long dec(long n) {
+        return n - 1;
+    }
+
+    public static double dec(double n) {
+        return n - 1.0;
+    }
+
+    public static boolean isZero(long n) {
+        return n == 0;
+    }
+
+    public static boolean isZero(double n) {
+        return n == 0.0;
+    }
 
     public static long add(long a, long b) {
         return a + b;
