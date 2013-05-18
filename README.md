@@ -1,13 +1,13 @@
-# vertigo
-
-A Clojure library designed to ... well, that part is up to you.
+A description will one day live here.
 
 ## Usage
 
-FIXME
+```clj
+[vertigo "0.1.0-SNAPSHOT"]
+```
 
 ## License
 
-Copyright © 2012 FIXME
+Copyright © 2013 Zachary Tellman
 
-Distributed under the Eclipse Public License, the same as Clojure.
+Distributed under the MIT Public License

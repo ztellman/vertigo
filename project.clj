@@ -1,7 +1,7 @@
 (defproject vertigo "0.1.0-SNAPSHOT"
-  :description "dizzying heights of performance"
-  :license {:name "Eclipse Public License"
-            :url "http://www.eclipse.org/legal/epl-v10.html"}
+  :description "peering down into the machine"
+  :license {:name "MIT Public License"
+            :url "http://opensource.org/licenses/MIT"}
   :dependencies [[potemkin "0.2.3-SNAPSHOT"]
                  [robert/hooke "1.3.0"]]
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
