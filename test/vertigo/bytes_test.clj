@@ -17,12 +17,12 @@
      ByteSeq]))
 
 (def types
-  {:byte   [1 b/put-byte b/get-byte]
-   :short  [2 b/put-short b/get-short]
-   :int    [4 b/put-int b/get-int]
-   :long   [8 b/put-long b/get-long]
-   :float  [4 b/put-float b/get-float]
-   :double [8 b/put-double b/get-double]})
+  {:int8    [1 b/put-int8 b/get-int8]
+   :int16   [2 b/put-int16 b/get-int16]
+   :int32   [4 b/put-int32 b/get-int32]
+   :int64   [8 b/put-int64 b/get-int64]
+   :float32 [4 b/put-float32 b/get-float32]
+   :float64 [8 b/put-float64 b/get-float64]})
 
 (defn repeatedly-put [type s]
   (let [[byte-size put-f get-f] (types type)
@@ -45,7 +45,7 @@
 
 (deftest test-roundtrip
   (doseq [t (keys types)]
-    (let [s (if (#{:float :double} t)
+    (let [s (if (#{:float32 :float64} t)
               (map double (range 10))
               (range 10))
           [byte-size put-f get-f] (types t)]
@@ -94,24 +94,24 @@
 (deftest ^:benchmark benchmark-byte-seq
   (let [bs (b/byte-seq (ByteBuffer/allocateDirect 8))]
     (t/batch-bench "byte-seq: get"
-      (b/get-long bs 0))
+      (b/get-int64 bs 0))
     (t/batch-bench "byte-seq: put"
-      (b/put-long bs 0 0))
+      (b/put-int64 bs 0 0))
     (t/batch-bench "byte-seq: get and put"
-      (b/put-long bs 0 (p/inc (b/get-long bs 0))))))
+      (b/put-int64 bs 0 (p/inc (b/get-int64 bs 0))))))
 
 (deftest ^:benchmark benchmark-chunked-byte-seq
   (let [bs (-> (ByteBuffer/allocateDirect 40) b/byte-seq (->chunked 8))]
     (t/batch-bench "chunked-byte-seq first chunk: get"
-      (b/get-long bs 0))
+      (b/get-int64 bs 0))
     (t/batch-bench "chunked-byte-seq first chunk: put"
-      (b/put-long bs 0 0))
+      (b/put-int64 bs 0 0))
     (t/batch-bench "chunked-byte-seq first chunk: get and put"
-      (b/put-long bs 0 (p/inc (b/get-long bs 0))))
+      (b/put-int64 bs 0 (p/inc (b/get-int64 bs 0))))
 
     (t/batch-bench "chunked-byte-seq fifth chunk: get"
-      (b/get-long bs 32))
+      (b/get-int64 bs 32))
     (t/batch-bench "chunked-byte-seq fifth chunk: put"
-      (b/put-long bs 32 0))
+      (b/put-int64 bs 32 0))
     (t/batch-bench "chunked-byte-seq fifth chunk: get and put"
-      (b/put-long bs 32 (p/inc (b/get-long bs 32))))))
+      (b/put-int64 bs 32 (p/inc (b/get-int64 bs 32))))))

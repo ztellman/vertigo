@@ -6,10 +6,10 @@
     [vertigo.primitives :as p]))
 
 (def primitive-ops
-  {:long  [p/long->ulong   p/ulong->long    p/reverse-long]
-   :int   [p/int->uint     p/uint->int      p/reverse-int]
-   :short [p/short->ushort p/ushort->short  p/reverse-short]
-   :byte  [p/byte->ubyte   p/ubyte->byte    identity]})
+  {:int64  [p/int64->uint64   p/uint64->int64   p/reverse-int64]
+   :int32  [p/int32->uint32   p/uint32->int32   p/reverse-int32]
+   :int16  [p/int16->uint16   p/uint16->int16   p/reverse-int16]
+   :int8   [p/int8->uint8     p/uint8->int8     identity]})
 
 (deftest test-roundtrips
   (are [type nums]
@@ -20,10 +20,10 @@
            (= % (-> % reverse-fn reverse-fn)))
         nums))
 
-    :long   [-1 0 1 Long/MIN_VALUE     Long/MAX_VALUE]
-    :int    [-1 0 1 Integer/MIN_VALUE  Integer/MAX_VALUE]
-    :short  [-1 0 1 Short/MIN_VALUE    Short/MAX_VALUE]
-    :byte   [-1 0 1 Byte/MIN_VALUE     Byte/MAX_VALUE]))
+    :int64  [-1 0 1 Long/MIN_VALUE     Long/MAX_VALUE]
+    :int32  [-1 0 1 Integer/MIN_VALUE  Integer/MAX_VALUE]
+    :int16  [-1 0 1 Short/MIN_VALUE    Short/MAX_VALUE]
+    :int8   [-1 0 1 Byte/MIN_VALUE     Byte/MAX_VALUE]))
 
 (defn eval-assertions [x]
   (eval

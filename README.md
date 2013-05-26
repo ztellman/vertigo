@@ -10,4 +10,4 @@ A description will one day live here.
 
 Copyright © 2013 Zachary Tellman
 
-Distributed under the MIT Public License
+Distributed under the [MIT License](http://opensource.org/licenses/MIT)

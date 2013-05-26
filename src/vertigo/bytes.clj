@@ -21,42 +21,46 @@
 (prim/use-primitive-operators)
 
 (definterface+ IByteSeq
-  (get-byte ^long [_ ^long idx])
-  (get-short ^long [_ ^long idx])
-  (get-int ^long [_ ^long idx])
-  (get-long ^long [_ ^long idx])
-  (get-float ^double [_ ^long idx])
-  (get-double ^double [_ ^long idx])
+  (get-int8 ^long [_ ^long idx])
+  (get-int16 ^long [_ ^long idx])
+  (get-int32 ^long [_ ^long idx])
+  (get-int64 ^long [_ ^long idx])
+  (get-float32 ^double [_ ^long idx])
+  (get-float64 ^double [_ ^long idx])
   
-  (put-byte [_ ^long idx ^long val])
-  (put-short [_ ^long idx ^long val])
-  (put-int [_ ^long idx ^long val])
-  (put-long [_ ^long idx ^long val])
-  (put-float [_ ^long idx ^double val])
-  (put-double [_ ^long idx ^double val])
+  (put-int8 [_ ^long idx ^long val])
+  (put-int16 [_ ^long idx ^long val])
+  (put-int32 [_ ^long idx ^long val])
+  (put-int64 [_ ^long idx ^long val])
+  (put-float32 [_ ^long idx ^double val])
+  (put-float64 [_ ^long idx ^double val])
 
   (drop-bytes [_ ^long n])
 
   (byte-order [_])
   (set-byte-order! [_ order]))
 
+
+
+;;;
+
 (deftype+ ByteSeq
   [^ByteBuffer buf
    ^long offset]
    IByteSeq
-  (get-byte [this idx]   (long (.get buf (+ offset idx))))
-  (get-short [this idx]  (long (.getShort buf (+ offset idx))))
-  (get-int [this idx]    (long (.getInt buf (+ offset idx))))
-  (get-long [this idx]   (.getLong buf (+ offset idx)))
-  (get-float [this idx]  (double (.getFloat buf (+ offset idx))))
-  (get-double [this idx] (.getDouble buf (+ offset idx)))
+  (get-int8 [this idx]   (long (.get buf (+ offset idx))))
+  (get-int16 [this idx]  (long (.getShort buf (+ offset idx))))
+  (get-int32 [this idx]    (long (.getInt buf (+ offset idx))))
+  (get-int64 [this idx]   (.getLong buf (+ offset idx)))
+  (get-float32 [this idx]  (double (.getFloat buf (+ offset idx))))
+  (get-float64 [this idx] (.getDouble buf (+ offset idx)))
 
-  (put-byte [this idx val]   (.put buf (+ offset idx) val) nil)
-  (put-short [this idx val]  (.putShort buf (+ offset idx) val) nil)
-  (put-int [this idx val]    (.putInt buf (+ offset idx) val) nil)
-  (put-long [this idx val]   (.putLong buf (+ offset idx) val) nil)
-  (put-float [this idx val]  (.putFloat buf (+ offset idx) val) nil)
-  (put-double [this idx val] (.putDouble buf (+ offset idx) val) nil)
+  (put-int8 [this idx val]   (.put buf (+ offset idx) val) nil)
+  (put-int16 [this idx val]  (.putShort buf (+ offset idx) val) nil)
+  (put-int32 [this idx val]    (.putInt buf (+ offset idx) val) nil)
+  (put-int64 [this idx val]   (.putLong buf (+ offset idx) val) nil)
+  (put-float32 [this idx val]  (.putFloat buf (+ offset idx) (float val)) nil)
+  (put-float64 [this idx val] (.putDouble buf (+ offset idx) val) nil)
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
@@ -103,11 +107,10 @@
        (when-not (nil? chunk##)
          (let [idx'## (+ (.offset chunk##) to-drop#)]
           (if (<= (.size chunk##) idx'##)
-            (let [next# (.next chunk##)]
-              (let [next# (.next chunk##)
-                    next# (when-not (nil? next#) @next#)
-                    next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk##)))]
-                (recur next# (- to-drop# (- (.size chunk##) (.offset chunk##))))))
+            (let [next# (.next chunk##)
+                  next# (when-not (nil? next#) @next#)
+                  next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk##)))]
+              (recur next# (- to-drop# (- (.size chunk##) (.offset chunk##)))))
             ~((eval constructor) `chunk## `idx'##)))))))
 
 (deftype+ ChunkedByteSeq
@@ -119,19 +122,19 @@
 
   IByteSeq
   
-  (get-byte [this idx]   (long (loop-and-get this offset idx .get)))
-  (get-short [this idx]  (long (loop-and-get this offset idx .getShort)))
-  (get-int [this idx]    (long (loop-and-get this offset idx .getInt)))
-  (get-long [this idx]   (loop-and-get this offset idx .getLong))
-  (get-float [this idx]  (double (loop-and-get this offset idx .getFloat)))
-  (get-double [this idx] (double (loop-and-get this offset idx .getDouble)))
+  (get-int8 [this idx]     (long (loop-and-get this offset idx .get)))
+  (get-int16 [this idx]    (long (loop-and-get this offset idx .getShort)))
+  (get-int32 [this idx]    (long (loop-and-get this offset idx .getInt)))
+  (get-int64 [this idx]    (loop-and-get this offset idx .getLong))
+  (get-float32 [this idx]  (double (loop-and-get this offset idx .getFloat)))
+  (get-float64 [this idx]  (loop-and-get this offset idx .getDouble))
 
-  (put-byte [this idx val]   (loop-and-put this offset idx val .put))
-  (put-short [this idx val]  (loop-and-put this offset idx val .putShort))
-  (put-int [this idx val]    (loop-and-put this offset idx val .putInt))
-  (put-long [this idx val]   (loop-and-put this offset idx val .putLong))
-  (put-float [this idx val]  (loop-and-put this offset idx val .putFloat))
-  (put-double [this idx val] (loop-and-put this offset idx val .putDouble))
+  (put-int8 [this idx val]     (loop-and-put this offset idx val .put))
+  (put-int16 [this idx val]    (loop-and-put this offset idx val .putShort))
+  (put-int32 [this idx val]    (loop-and-put this offset idx val .putInt))
+  (put-int64 [this idx val]    (loop-and-put this offset idx val .putLong))
+  (put-float32 [this idx val]  (loop-and-put this offset idx val .putFloat))
+  (put-float64 [this idx val]  (loop-and-put this offset idx val .putDouble))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
