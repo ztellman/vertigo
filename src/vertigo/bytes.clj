@@ -35,90 +35,114 @@
   (put-float32 [_ ^long idx ^double val])
   (put-float64 [_ ^long idx ^double val])
 
+  (byte-count ^long [_])
   (drop-bytes [_ ^long n])
+  (truncate [_ ^long limit])
+
+  (local-bytes [_])
 
   (byte-order [_])
-  (set-byte-order! [_ order]))
+  (set-byte-order! [_ order])
 
-
+  (byte-seq-reduce [_ ^long stride f start]))
 
 ;;;
 
 (deftype+ ByteSeq
   [^ByteBuffer buf
-   ^long offset]
-   IByteSeq
-  (get-int8 [this idx]   (long (.get buf (+ offset idx))))
-  (get-int16 [this idx]  (long (.getShort buf (+ offset idx))))
+   ^long offset
+   ^long limit]
+  IByteSeq
+  (get-int8 [this idx]     (long (.get buf (+ offset idx))))
+  (get-int16 [this idx]    (long (.getShort buf (+ offset idx))))
   (get-int32 [this idx]    (long (.getInt buf (+ offset idx))))
-  (get-int64 [this idx]   (.getLong buf (+ offset idx)))
+  (get-int64 [this idx]    (.getLong buf (+ offset idx)))
   (get-float32 [this idx]  (double (.getFloat buf (+ offset idx))))
-  (get-float64 [this idx] (.getDouble buf (+ offset idx)))
+  (get-float64 [this idx]  (.getDouble buf (+ offset idx)))
 
-  (put-int8 [this idx val]   (.put buf (+ offset idx) val) nil)
-  (put-int16 [this idx val]  (.putShort buf (+ offset idx) val) nil)
+  (put-int8 [this idx val]     (.put buf (+ offset idx) val) nil)
+  (put-int16 [this idx val]    (.putShort buf (+ offset idx) val) nil)
   (put-int32 [this idx val]    (.putInt buf (+ offset idx) val) nil)
-  (put-int64 [this idx val]   (.putLong buf (+ offset idx) val) nil)
+  (put-int64 [this idx val]    (.putLong buf (+ offset idx) val) nil)
   (put-float32 [this idx val]  (.putFloat buf (+ offset idx) (float val)) nil)
-  (put-float64 [this idx val] (.putDouble buf (+ offset idx) val) nil)
+  (put-float64 [this idx val]  (.putDouble buf (+ offset idx) val) nil)
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
+  (local-bytes [this] this)
+
+  (byte-seq-reduce [this stride f start]
+    (let [size (- limit offset)]
+      (loop [idx 0, val start]
+        (if (<= size idx)
+          val
+          (let [val' (f this idx val)]
+            (if (reduced? val')
+              @val'
+              (recur (+ idx stride) val')))))))
+
+  (byte-count [_]
+    (- limit offset))
 
   (drop-bytes [_ n]
     (let [idx' (+ offset n)]
-      (when (<= idx' (.remaining buf))
-        (ByteSeq. buf idx'))))
-  
-  clojure.lang.Counted
-  (count [_] (- (.remaining buf) offset)))
+      (when (< idx' limit)
+        (ByteSeq. buf idx' limit))))
+
+  (truncate [_ lim]
+    (when (|| (< limit lim) (< lim offset))
+      (throw (IllegalArgumentException. "truncate length must be less than or equal to the size of the byte-seq")))
+    (ByteSeq. buf offset lim)))
 
 ;;;
 
+(defmacro ^:private next-chunk [chunk]
+  `(let [next# (.next-chunk ~chunk)
+         next# (when-not (nil? next#) @next#)
+         next# (when-not (nil? next#) (set-byte-order! next# (byte-order ~chunk)))]
+     next#))
+
 (defmacro ^:private loop-and-get [this offset idx f]
-  `(loop [chunk# ~this, idx# ~idx]
+  `(loop [chunk# ~this, idx# (long ~idx)]
      (if (nil? chunk#)
        (throw (IndexOutOfBoundsException. (str ~idx)))
        (let [idx'# (+ idx# ~offset)
-             size# (.size chunk#)]
-         (if (< idx'# size#)
+             limit# (.limit chunk#)]
+         (if (< idx'# limit#)
            (~f ^ByteBuffer (.buf chunk#) idx'#)
-           (let [next# (.next chunk#)
-                 next# (when-not (nil? next#) @next#)
-                 next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk#)))]
-             (recur next# (- (long idx#) size#))))))))
+           (recur (next-chunk chunk#) (- idx# limit#)))))))
 
 (defmacro ^:private loop-and-put [this offset idx val f]
-  `(loop [chunk# ~this, idx# ~idx]
+  `(loop [chunk# ~this, idx# (long ~idx)]
      (if (nil? chunk#)
        (throw (IndexOutOfBoundsException. (str ~idx)))
        (let [idx'# (+ idx# ~offset)
-             size# (.size chunk#)]
-         (if (< idx'# size#)
+             limit# (.limit chunk#)]
+         (if (< idx'# limit#)
            (~f ^ByteBuffer (.buf chunk#) idx'# ~val)
-           (let [next# (.next chunk#)
-                 next# (when-not (nil? next#) @next#)
-                 next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk#)))]
-             (recur next# (- (long idx#) size#))))))))
-
-(defmacro ^:private loop-and-drop [this to-drop constructor]
-  (unify-gensyms
-    `(loop [chunk## ~this, to-drop# ~to-drop]
-       (when-not (nil? chunk##)
-         (let [idx'## (+ (.offset chunk##) to-drop#)]
-          (if (<= (.size chunk##) idx'##)
-            (let [next# (.next chunk##)
-                  next# (when-not (nil? next#) @next#)
-                  next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk##)))]
-              (recur next# (- to-drop# (- (.size chunk##) (.offset chunk##)))))
-            ~((eval constructor) `chunk## `idx'##)))))))
+           (recur (next-chunk chunk#) (- idx# limit#)))))))
 
 (deftype+ ChunkedByteSeq
   [^ByteBuffer buf
    ^long offset
-   ^long size
-   next
+   ^long limit
+   next-chunk
    close-fn]
+
+  clojure.lang.ISeq
+  (seq [this]
+    this)
+  (first [_]
+    (ByteSeq. buf offset limit))
+  (next [this]
+    (let [nxt (when-not (nil? next-chunk) @next-chunk)]
+      (when-not (nil? nxt)
+        (set-byte-order! nxt (.order buf)))
+      nxt))
+  (more [this]
+    (or (next this) '()))
+  (cons [this buffer]
+    (ChunkedByteSeq. buf 0 (.remaining buf) (delay this) close-fn))
 
   IByteSeq
   
@@ -138,15 +162,52 @@
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
+  (local-bytes [this] (first this))
+
+  (byte-seq-reduce [this stride f start]
+    (loop [chunk this, val start]
+      (let [val' (let [size (- (.limit chunk) (.offset chunk))]
+                   (loop [idx 0, val val]
+                     (if (<= size idx)
+                       val
+                       (let [val' (f chunk idx val)]
+                         (if (reduced? val')
+                           val'
+                           (recur (+ idx stride) val'))))))]
+        (if (reduced? val')
+          @val'
+          (let [nxt (next chunk)]
+            (if (nil? nxt)
+              val'
+              (recur nxt val')))))))
+
+  (byte-count [this]
+    (loop [chunk this, acc 0]
+      (if (nil? chunk)
+        acc
+        (recur (next chunk) (+ acc (- (.limit chunk) (.offset chunk)))))))
+
+  (truncate [_ lim]
+    (when (|| (< lim offset) (< limit lim))
+      (throw (IllegalArgumentException. "truncate length must be less than or equal to the size of the byte-seq chunk")))
+    (ChunkedByteSeq. buf offset lim next-chunk close-fn))
+  
+  (drop-bytes [this n]
+    (loop [chunk this, to-drop n]
+      (when-not (nil? chunk)
+        (let [idx' (+ (.offset chunk) to-drop)
+              limit (.limit chunk)]
+          (if (<= limit idx')
+            (recur (next chunk) (- to-drop (- limit (.offset chunk))))
+            (ChunkedByteSeq. (.buf chunk) idx' limit (.next-chunk chunk) (.close-fn chunk)))))))
 
   java.io.Closeable
   (close [_]
     (when close-fn
-      (close-fn)))
-  (drop-bytes [this n]
-    (loop-and-drop this n
-      (fn [chunk idx]
-        `(ChunkedByteSeq. (.buf ~chunk) ~idx (.size ~chunk) (.next ~chunk) (.close-fn ~chunk))))))
+      (close-fn))))
+
+(defmethod print-method ChunkedByteSeq [o ^java.io.Writer writer]
+  (print-method (map identity o) writer))
 
 ;;;
 
@@ -168,7 +229,7 @@
 
 (defn byte-seq
   [^ByteBuffer buf]
-  (ByteSeq. (with-native-order buf) 0))
+  (ByteSeq. (with-native-order buf) 0 (.remaining buf)))
 
 (defn array->buffer
   ([ary]

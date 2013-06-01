@@ -31,6 +31,7 @@
 (variadic-proxy -    vertigo.utils.Primitives/subtract)
 (variadic-proxy *    vertigo.utils.Primitives/multiply)
 (variadic-proxy /    vertigo.utils.Primitives/divide)
+(variadic-proxy div  vertigo.utils.Primitives/divide)
 (variadic-proxy &&   vertigo.utils.Primitives/and)
 (variadic-proxy ||   vertigo.utils.Primitives/or)
 (variadic-proxy &&'  vertigo.utils.Primitives/bitAnd)
@@ -154,7 +155,7 @@
 
 (defn int16->uint16
   "Converts an int16 to a uint16."
-  {:inline (fn [x] `(->> x long (Primitives/bitAnd 0xFF) Primitives/toInt))}
+  {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFF) Primitives/toInteger))}
   ^long [^long x]
   (int32 (&&' 0xFFFF x)))
 
@@ -195,7 +196,7 @@
 
 (defn int32->float32
   "Converts an int32 to a float32."
-  {:inline (fn [x] `(Float/intBitsToFloat (Primitives/toInt ~x)))}
+  {:inline (fn [x] `(Float/intBitsToFloat (Primitives/toInteger ~x)))}
   ^double [^long x]
   (double (Float/intBitsToFloat x)))
 
@@ -230,3 +231,15 @@
   {:inline (fn [x] `(Primitives/reverseLong ~x))}
   ^long [^long x]
   (->> x Primitives/reverseLong long))
+
+(defn reverse-float32
+  "Inverts the endianness of a float32."
+  {:inline (fn [x] `(-> ~x float32->int32 reverse-int32 int32->float32))}
+  ^double [^double x]
+  (-> x float32->int32 reverse-int32 int32->float32))
+
+(defn reverse-float64
+  "Inverts the endianness of a float32."
+  {:inline (fn [x] `(-> ~x float32->int32 reverse-int32 int32->float32))}
+  ^double [^double x]
+  (-> x float64->int64 reverse-int64 int64->float64))

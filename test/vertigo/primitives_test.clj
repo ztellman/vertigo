@@ -6,10 +6,12 @@
     [vertigo.primitives :as p]))
 
 (def primitive-ops
-  {:int64  [p/int64->uint64   p/uint64->int64   p/reverse-int64]
-   :int32  [p/int32->uint32   p/uint32->int32   p/reverse-int32]
-   :int16  [p/int16->uint16   p/uint16->int16   p/reverse-int16]
-   :int8   [p/int8->uint8     p/uint8->int8     identity]})
+  {:int64    [p/int64->uint64   p/uint64->int64   p/reverse-int64]
+   :int32    [p/int32->uint32   p/uint32->int32   p/reverse-int32]
+   :int16    [p/int16->uint16   p/uint16->int16   p/reverse-int16]
+   :int8     [p/int8->uint8     p/uint8->int8     identity]
+   :float32  [identity identity p/reverse-float32]
+   :float64  [identity identity p/reverse-float64]})
 
 (deftest test-roundtrips
   (are [type nums]
