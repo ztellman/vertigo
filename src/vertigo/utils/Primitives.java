@@ -2,20 +2,20 @@ package vertigo.utils;
 
 public class Primitives {
 
-    public static long toByte(long n) {
-        return (long) ((byte) n);
+    public static byte toByte(long n) {
+        return (byte) n;
     }
 
-    public static long toShort(long n) {
-        return (long) ((short) n);
+    public static short toShort(long n) {
+        return (short) n;
     }
 
-    public static long toInteger(long n) {
-        return (long) ((int) n);
+    public static int toInteger(long n) {
+        return (int) n;
     }
 
-    public static double toFloat(double n) {
-        return (double) ((float) n);
+    public static float toFloat(double n) {
+        return (float) n;
     }
 
     public static short reverseShort(long n) {

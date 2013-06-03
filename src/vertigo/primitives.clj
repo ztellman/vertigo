@@ -145,37 +145,37 @@
   "Converts an int8 to a uint8."
   {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFF) Primitives/toShort))}
   ^long [^long x]
-  (int16 (&&' x 0xFF)))
+  (long (int16 (&&' x 0xFF))))
 
 (defn uint8->int8
   "Converts a uint8 to an int8."
   {:inline (fn [x] `(Primitives/toByte (long ~x)))}
   ^long [^long x]
-  (int8 x))
+  (long (int8 x)))
 
 (defn int16->uint16
   "Converts an int16 to a uint16."
   {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFF) Primitives/toInteger))}
   ^long [^long x]
-  (int32 (&&' 0xFFFF x)))
+  (long (int32 (&&' 0xFFFF x))))
 
 (defn uint16->int16
   "Converts a uint16 to an int16."
   {:inline (fn [x] `(Primitives/toShort (long ~x)))}
   ^long [^long x]
-  (int16 x))
+  (long (int16 x)))
 
 (defn int32->uint32
   "Converts an int32 to a uint32."
   {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFFFFFFFF)))}
   ^long [^long x]
-  (int64 (&&' 0xFFFFFFFF x)))
+  (long (int64 (&&' 0xFFFFFFFF x))))
 
 (defn uint32->int32
   "Converts a uint32 to an int32."
   {:inline (fn [x] `(Primitives/toInteger (long ~x)))}
   ^long [^long x]
-  (int32 x))
+  (long (int32 x)))
 
 (defn int64->uint64
   "Converts an int64 to a uint64."
