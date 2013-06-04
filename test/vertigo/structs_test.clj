@@ -38,21 +38,21 @@
 (deftest test-simple-roundtrips
   (doseq [typ primitives]
     (let [s (if (re-find #"float" (name typ))
-              (map double (range 100))
-              (range 100))]
+              (map double (range 10))
+              (range 10))]
       (is (= s (s/marshal-seq typ s)))
       (is (= s (s/lazily-marshal-seq typ s)))
       (is (= s (s/lazily-marshal-seq typ 32 s))))))
 
 (s/def-typed-struct vec2
   :x s/float64
-  :y s/int64)
+  :y (s/array s/int64 10))
 
 (deftest test-compound-roundtrips
   (let [s (map
             #(hash-map :x %1 :y %2)
-            (map double (range 100))
-            (range 100))]
+            (map double (range 10))
+            (repeat 10 (range 10)))]
     (is (= s (s/marshal-seq vec2 s)))))
 
 ;;;

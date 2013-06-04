@@ -20,121 +20,19 @@
     "Returns of the offset of the field within the struct, in bytes.")
   (field-type [_ x]
     "Returns the type of the field.")
-
   (write-value [_ byte-seq ^long offset x]
     "Writes the value to a byte-seq at the given byte offset.")
   (read-value [_ byte-seq ^long offset]
-    "Reads the value from a byte-seq at the given byte-offset.")
-  
+    "Reads the value from a byte-seq at the given byte-offset."))
+
+(definterface+ IPrimitiveInlinedType
   (read-form [_ byte-seq idx]
-    "Returns an eval'able form for reading the struct off a byte-seq. If nil, falls back
-     to `read-value`.")
+    "Returns an eval'able form for reading the struct off a byte-seq.")
   (write-form [_ byte-seq idx val]
-    "Returns an eval'able form for writing the struct to a byte-seq.  If nil, falls back
-     to `write-value`."))
+    "Returns an eval'able form for writing the struct to a byte-seq."))
 
 (definterface+ IByteSeqWrapper
   (unwrap-byte-seq [_]))
-
-;;;
-
-(defn- byte-seq-wrapper-reduce
-  ([byte-seq-wrapper f start]
-     (proto/internal-reduce byte-seq-wrapper f start))
-  ([byte-seq-wrapper f]
-     (if (nil? byte-seq-wrapper)
-       (f)
-       (proto/internal-reduce (next byte-seq-wrapper) f (first byte-seq-wrapper)))))
-
-;; a type that, given an IPrimitiveType, can treat a byte-seq as a sequence of that type
-;; `stride` and `offset` are so that an inner type be iterated over without copying
-(deftype ByteSeqWrapper
-  [^long stride
-   ^long offset
-   ^vertigo.structs.IPrimitiveType type
-   ^vertigo.bytes.IByteSeq byte-seq]
-
-  IByteSeqWrapper
-  (unwrap-byte-seq [_] byte-seq)
-
-  clojure.lang.ISeq
-  clojure.lang.Seqable
-  clojure.lang.Sequential
-  clojure.lang.Indexed
-  
-  (first [_]
-    (read-value type byte-seq offset))
-  (next [_]
-    (when-let [byte-seq' (b/drop-bytes byte-seq stride)]
-      (ByteSeqWrapper. stride offset type byte-seq')))
-  (more [this]
-    (or (next this) '()))
-  (count [_]
-    (p/div (b/byte-count byte-seq) stride))
-  (nth [_ idx]
-    (read-value type byte-seq (p/+ offset (p/* stride idx))))
-  (nth [this idx default-value]
-    (try
-      (nth this idx)
-      (catch IndexOutOfBoundsException e
-        default-value)))
-  (seq [this]
-    this)
-
-  proto/InternalReduce
-
-  (internal-reduce [_ f start]
-    (b/byte-seq-reduce byte-seq stride
-      (fn [byte-seq idx]
-        (read-value type byte-seq (p/+ offset (long idx))))
-      f
-      start))
-  
-  proto/CollReduce
-  (coll-reduce [this f start]
-    (byte-seq-wrapper-reduce this f start))
-  
-  (coll-reduce [this f]
-    (byte-seq-wrapper-reduce this f)))
-
-(defn wrap-byte-seq
-  [type byte-seq]
-  (ByteSeqWrapper. (byte-size type) 0 type byte-seq))
-
-(defn marshal-seq
-  "Converts a sequence into a marshalled version of itself."
-  [type s]
-  (let [cnt (count s)
-        stride (byte-size type)
-        byte-seq (-> (long cnt)
-                   (p/* (long stride))
-                   ByteBuffer/allocateDirect
-                   b/byte-seq)]
-    (loop [offset 0, s s]
-      (when-not (empty? s)
-        (write-value type byte-seq offset (first s))
-        (recur (p/+ offset stride) (rest s))))
-    (wrap-byte-seq type byte-seq)))
-
-(defn lazily-marshal-seq
-  ([type s]
-     (lazily-marshal-seq type 4096 s))
-  ([type ^long chunk-byte-size s]
-     (let [stride (byte-size type)
-           chunk-size (p/div chunk-byte-size stride)
-           populate (fn populate [s]
-                      (when-not (empty? s)
-                        (let [nxt (delay (populate (drop chunk-size s)))
-                              byte-seq (-> chunk-byte-size
-                                         ByteBuffer/allocateDirect
-                                         (b/lazy-byte-seq nxt))]
-                          (loop [idx 0, offset 0, s s]
-                            (if (or (p/== chunk-size idx) (empty? s))
-                              (b/slice byte-seq 0 offset)
-                              (do
-                                (write-value type byte-seq offset (first s))
-                                (recur (p/inc idx) (p/+ offset stride) (rest s))))))))]
-       (wrap-byte-seq type (populate s)))))
 
 ;;;
 
@@ -152,6 +50,7 @@
               (list '~w b# idx# (list '~to-unsigned val#)))
             (fn [x#]
               (list '~to-unsigned (list '~rev (list '~to-signed x#))))])
+
       types ['int8    1 (s `b/get-int8 `b/put-int8 `identity)
              'uint8   1 (u `b/get-int8 `b/put-int8 `identity `p/int8->uint8 `p/uint8->int8)
              'int16   2 (s `b/get-int16 `b/put-int16 `p/reverse-int16)
@@ -189,6 +88,8 @@
                    ~(write-form `byte-seq## `offset## `x##))
                  (read-value [_# byte-seq## offset##]
                    ~(read-form `byte-seq## `offset##))
+
+                 IPrimitiveInlinedType
                  (read-form [_# b# idx#]
                    (read-form# b# idx#))
                  (write-form [_# b# idx# x#]
@@ -227,6 +128,8 @@
                          (if (~check byte-seq##)
                            ~(rev-form `x##)
                            x##)))
+
+                     IPrimitiveInlinedType
                      (read-form [_# b# idx#]
                        (list 'let [`x## (read-form# b# idx#)]
                          (list 'if (list ~check b#)
@@ -319,13 +222,149 @@
                        (~'assoc [this# k# v#]
                          (assoc (into {} this#) k# v#))
                        (~'dissoc [this# k#]
-                         (dissoc (into {} this#) k#)))))
-                 (write-form [_# byte-seq# offset# x#]
-                   nil)
-                 (read-form [_# byte-seq# offset#]
-                   nil)))))))))
+                         (dissoc (into {} this#) k#)))))))))))))
 
 (defmacro def-typed-struct
-
+  "Like `typed-struct`, but defines a var."
   [name & field+types]
   `(def ~name (typed-struct name ~@field+types)))
+
+;;;
+
+(defn- byte-seq-wrapper-reduce
+  ([byte-seq-wrapper f start]
+     (proto/internal-reduce byte-seq-wrapper f start))
+  ([byte-seq-wrapper f]
+     (if (nil? byte-seq-wrapper)
+       (f)
+       (proto/internal-reduce (next byte-seq-wrapper) f (first byte-seq-wrapper)))))
+
+;; a type that, given an IPrimitiveType, can treat a byte-seq as a sequence of that type
+;; `stride` and `offset` are so that an inner type be iterated over without copying
+(deftype ByteSeqWrapper
+  [^long stride
+   ^long offset
+   ^vertigo.structs.IPrimitiveType type
+   ^vertigo.bytes.IByteSeq byte-seq]
+
+  IByteSeqWrapper
+  (unwrap-byte-seq [_] byte-seq)
+
+  clojure.lang.ISeq
+  clojure.lang.Seqable
+  clojure.lang.Sequential
+  clojure.lang.Indexed
+  
+  (first [_]
+    (read-value type byte-seq offset))
+  (next [_]
+    (when-let [byte-seq' (b/drop-bytes byte-seq stride)]
+      (ByteSeqWrapper. stride offset type byte-seq')))
+  (more [this]
+    (or (next this) '()))
+  (count [_]
+    (p/div (b/byte-count byte-seq) stride))
+  (nth [_ idx]
+    (read-value type byte-seq (p/+ offset (p/* stride idx))))
+  (nth [this idx default-value]
+    (try
+      (nth this idx)
+      (catch IndexOutOfBoundsException e
+        default-value)))
+  (seq [this]
+    this)
+
+  proto/InternalReduce
+
+  (internal-reduce [_ f start]
+    (b/byte-seq-reduce byte-seq stride
+      (fn [byte-seq idx]
+        (read-value type byte-seq (p/+ offset (long idx))))
+      f
+      start))
+  
+  proto/CollReduce
+  (coll-reduce [this f start]
+    (byte-seq-wrapper-reduce this f start))
+  
+  (coll-reduce [this f]
+    (byte-seq-wrapper-reduce this f)))
+
+(defn wrap-byte-seq
+  "Treats the byte-seq as a sequence of the given type."
+  ([type byte-seq]
+     (wrap-byte-seq type (byte-size type) 0 byte-seq))
+  ([type stride offset byte-seq]
+     (ByteSeqWrapper. stride offset type byte-seq)))
+
+(defn marshal-seq
+  "Converts a sequence into a marshalled version of itself."
+  [type s]
+  (let [cnt (count s)
+        stride (byte-size type)
+        byte-seq (-> (long cnt)
+                   (p/* (long stride))
+                   ByteBuffer/allocateDirect
+                   b/byte-seq)]
+    (loop [offset 0, s s]
+      (when-not (empty? s)
+        (write-value type byte-seq offset (first s))
+        (recur (p/+ offset stride) (rest s))))
+    (wrap-byte-seq type byte-seq)))
+
+(defn lazily-marshal-seq
+  ([type s]
+     (lazily-marshal-seq type 4096 s))
+  ([type ^long chunk-byte-size s]
+     (let [stride (byte-size type)
+           chunk-size (p/div chunk-byte-size stride)
+           populate (fn populate [s]
+                      (when-not (empty? s)
+                        (let [nxt (delay (populate (drop chunk-size s)))
+                              byte-seq (-> chunk-byte-size
+                                         ByteBuffer/allocateDirect
+                                         (b/lazy-byte-seq nxt))]
+                          (loop [idx 0, offset 0, s s]
+                            (if (or (p/== chunk-size idx) (empty? s))
+                              (b/slice byte-seq 0 offset)
+                              (do
+                                (write-value type byte-seq offset (first s))
+                                (recur (p/inc idx) (p/+ offset stride) (rest s))))))))]
+       (wrap-byte-seq type (populate s)))))
+
+;;;
+
+(defn- assert-bounds [idx len]
+  (when-not (<= 0 idx (dec len))
+    (throw (IndexOutOfBoundsException. (str idx)))))
+
+(deftype PrimitiveTypeArray
+  [type
+   ^long len
+   ^long offset
+   ^long stride]
+
+  IPrimitiveType
+  (byte-size [_]
+    (p/* len stride))
+  (fields [_]
+    (range len))
+  (field-type [_ idx]
+    (assert-bounds idx)
+    type)
+  (field-offset [_ idx]
+    (assert-bounds idx)
+    (p/* (long idx) stride))
+  (read-value [_ buf offset']
+    (wrap-byte-seq
+      type stride offset
+      (b/slice buf offset' (p/* stride len))))
+  (write-value [_ buf offset' x]
+    (loop [s x, idx 0]
+      (when-not (p/== idx len)
+        (write-value type buf (p/+ offset' offset (p/* idx stride)) (first s))
+        (recur (rest s) (p/inc idx))))))
+
+(defn array
+  [type ^long len]
+  (PrimitiveTypeArray. type len 0 (byte-size type)))
