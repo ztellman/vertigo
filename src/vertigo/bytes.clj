@@ -37,14 +37,23 @@
 
   (byte-count ^long [_])
   (drop-bytes [_ ^long n])
-  (truncate [_ ^long limit])
-  (local-bytes [_ offset len])
+  (slice [_ ^long offset ^long len])
   (unwrap-buffers [_])
 
   (byte-order [_])
   (set-byte-order! [_ order])
 
   (byte-seq-reduce [_ stride read-fn f start]))
+
+(defn big-endian?
+  {:inline (fn [byte-seq] `(= java.nio.ByteOrder/BIG_ENDIAN (vertigo.bytes/byte-order ~byte-seq)))}
+  [byte-seq]
+  (= ByteOrder/BIG_ENDIAN (byte-order byte-seq)))
+
+(defn little-endian?
+  {:inline (fn [byte-seq] `(= java.nio.ByteOrder/LITTLE_ENDIAN (vertigo.bytes/byte-order ~byte-seq)))}
+  [byte-seq]
+  (= ByteOrder/LITTLE_ENDIAN (byte-order byte-seq)))
 
 ;;;
 
@@ -69,9 +78,8 @@
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
-  (local-bytes [this offset len] this)
 
-  (byte-seq-reduce [this stride read-fn f start]
+ (byte-seq-reduce [this stride read-fn f start]
     (let [stride (long stride)
           size (long (- limit offset))]
       (loop [idx 0, val start]
@@ -93,10 +101,10 @@
       (when (< idx' limit)
         (ByteSeq. buf idx' limit))))
 
-  (truncate [_ lim]
-    (when (|| (< limit lim) (< lim offset))
-      (throw (IllegalArgumentException. "truncate length must be less than or equal to the size of the byte-seq")))
-    (ByteSeq. buf offset lim)))
+  (slice [_ offset' len]
+    (when (< limit (+ offset offset' len)) 
+      (throw (IllegalArgumentException. "slice length must be less than or equal to the size of the byte-seq")))
+    (ByteSeq. buf (+ offset offset') (+ offset offset' len))))
 
 ;;;
 
@@ -106,24 +114,16 @@
          next# (when-not (nil? next#) (set-byte-order! next# (byte-order ~chunk)))]
      next#))
 
-(defmacro ^:private loop-and-get [this offset idx f]
+(defmacro ^:private find-in-chunks
+  "Finds the appropriate "
+  [this idx f & rest] 
   `(loop [chunk# ~this, idx# (long ~idx)]
      (if (nil? chunk#)
        (throw (IndexOutOfBoundsException. (str ~idx)))
-       (let [idx'# (+ idx# ~offset)
+       (let [idx'# (+ idx# (.offset chunk#))
              limit# (.limit chunk#)]
          (if (< idx'# limit#)
-           (~f ^ByteBuffer (.buf chunk#) (int idx'#))
-           (recur (next-chunk chunk#) (- idx# limit#)))))))
-
-(defmacro ^:private loop-and-put [this offset idx val f]
-  `(loop [chunk# ~this, idx# (long ~idx)]
-     (if (nil? chunk#)
-       (throw (IndexOutOfBoundsException. (str ~idx)))
-       (let [idx'# (+ idx# ~offset)
-             limit# (.limit chunk#)]
-         (if (< idx'# limit#)
-           (~f ^ByteBuffer (.buf chunk#) (int idx'#) ~val)
+           (~f ^ByteBuffer (.buf chunk#) (int idx'#) ~@rest)
            (recur (next-chunk chunk#) (- idx# limit#)))))))
 
 (deftype+ ChunkedByteSeq
@@ -150,23 +150,23 @@
 
   IByteSeq
   
-  (get-int8 [this idx]     (long (loop-and-get this offset idx .get)))
-  (get-int16 [this idx]    (long (loop-and-get this offset idx .getShort)))
-  (get-int32 [this idx]    (long (loop-and-get this offset idx .getInt)))
-  (get-int64 [this idx]    (loop-and-get this offset idx .getLong))
-  (get-float32 [this idx]  (double (loop-and-get this offset idx .getFloat)))
-  (get-float64 [this idx]  (loop-and-get this offset idx .getDouble))
+  (get-int8 [this idx]     (long (find-in-chunks this idx .get)))
+  (get-int16 [this idx]    (long (find-in-chunks this idx .getShort)))
+  (get-int32 [this idx]    (long (find-in-chunks this idx .getInt)))
+  (get-int64 [this idx]    (find-in-chunks this idx .getLong))
+  (get-float32 [this idx]  (double (find-in-chunks this idx .getFloat)))
+  (get-float64 [this idx]  (find-in-chunks this idx .getDouble))
 
-  (put-int8 [this idx val]     (loop-and-put this offset idx val .put))
-  (put-int16 [this idx val]    (loop-and-put this offset idx val .putShort))
-  (put-int32 [this idx val]    (loop-and-put this offset idx val .putInt))
-  (put-int64 [this idx val]    (loop-and-put this offset idx val .putLong))
-  (put-float32 [this idx val]  (loop-and-put this offset idx val .putFloat))
-  (put-float64 [this idx val]  (loop-and-put this offset idx val .putDouble))
+  (put-int8 [this idx val]     (find-in-chunks this idx .put val))
+  (put-int16 [this idx val]    (find-in-chunks this idx .putShort val))
+  (put-int32 [this idx val]    (find-in-chunks this idx .putInt val))
+  (put-int64 [this idx val]    (find-in-chunks this idx .putLong val))
+  (put-float32 [this idx val]  (find-in-chunks this idx .putFloat val))
+  (put-float64 [this idx val]  (find-in-chunks this idx .putDouble val))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
-  (local-bytes [this offset len] (first this))
+
   (unwrap-buffers [this]
     (cons
       (-> buf .duplicate (.position offset) ^ByteBuffer (.limit limit) .slice)
@@ -198,10 +198,10 @@
         acc
         (recur (next chunk) (+ acc (- (.limit chunk) (.offset chunk)))))))
 
-  (truncate [_ lim]
-    (when (|| (< lim offset) (< limit lim))
-      (throw (IllegalArgumentException. "truncate length must be less than or equal to the size of the byte-seq chunk")))
-    (ChunkedByteSeq. buf offset lim next-chunk close-fn))
+  (slice [_ offset' len]
+    (when (< limit (+ offset offset' len))
+      (throw (IllegalArgumentException. "slice length must be less than or equal to the size of the byte-seq chunk")))
+    (ChunkedByteSeq. buf (+ offset offset') (+ offset offset' len) next-chunk close-fn))
   
   (drop-bytes [this n]
     (loop [chunk this, to-drop n]

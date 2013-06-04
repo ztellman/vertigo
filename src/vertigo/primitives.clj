@@ -1,6 +1,6 @@
 (ns vertigo.primitives
   (:refer-clojure
-    :exclude [* + - / < > <= >= == byte short int float inc dec zero?])
+    :exclude [* + - / < > <= >= == bit-or bit-and byte short int float inc dec zero?])
   (:use
     potemkin)
   (:require
@@ -27,15 +27,15 @@
      ([x# y# ~'& rest#]
         (list 'vertigo.utils.Primitives/and (list '~name x# y#) (list* '~name y# rest#)))))
 
-(variadic-proxy +    vertigo.utils.Primitives/add)
-(variadic-proxy -    vertigo.utils.Primitives/subtract)
-(variadic-proxy *    vertigo.utils.Primitives/multiply)
-(variadic-proxy /    vertigo.utils.Primitives/divide)
-(variadic-proxy div  vertigo.utils.Primitives/divide)
-(variadic-proxy &&   vertigo.utils.Primitives/and)
-(variadic-proxy ||   vertigo.utils.Primitives/or)
-(variadic-proxy &&'  vertigo.utils.Primitives/bitAnd)
-(variadic-proxy ||'  vertigo.utils.Primitives/bitOr)
+(variadic-proxy +         vertigo.utils.Primitives/add)
+(variadic-proxy -         vertigo.utils.Primitives/subtract)
+(variadic-proxy *         vertigo.utils.Primitives/multiply)
+(variadic-proxy /         vertigo.utils.Primitives/divide)
+(variadic-proxy div       vertigo.utils.Primitives/divide)
+(variadic-proxy bit-and   vertigo.utils.Primitives/bitAnd)
+(variadic-proxy bit-or    vertigo.utils.Primitives/bitOr)
+(variadic-proxy and*      vertigo.utils.Primitives/and)
+(variadic-proxy or*       vertigo.utils.Primitives/or)
 
 (variadic-predicate-proxy >   vertigo.utils.Primitives/gt)
 (variadic-predicate-proxy <   vertigo.utils.Primitives/lt)
@@ -55,7 +55,7 @@
 ;;;
 
 (def ^:private vars-to-exclude
-  '[* + - / < > <= >= == byte short int float && || &&' ||' inc dec zero?])
+  '[* + - / < > <= >= == bit-or bit-and byte short int float inc dec zero?])
 
 (defn- using-primitive-operators? []
   (= #'vertigo.primitives/+ (resolve '+)))
@@ -145,7 +145,7 @@
   "Converts an int8 to a uint8."
   {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFF) Primitives/toShort))}
   ^long [^long x]
-  (long (int16 (&&' x 0xFF))))
+  (long (int16 (bit-and x 0xFF))))
 
 (defn uint8->int8
   "Converts a uint8 to an int8."
@@ -155,9 +155,9 @@
 
 (defn int16->uint16
   "Converts an int16 to a uint16."
-  {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFF) Primitives/toInteger))}
+  {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFFFF) Primitives/toInteger))}
   ^long [^long x]
-  (long (int32 (&&' 0xFFFF x))))
+  (long (int32 (bit-and 0xFFFF x))))
 
 (defn uint16->int16
   "Converts a uint16 to an int16."
@@ -169,7 +169,7 @@
   "Converts an int32 to a uint32."
   {:inline (fn [x] `(->> ~x long (Primitives/bitAnd 0xFFFFFFFF)))}
   ^long [^long x]
-  (long (int64 (&&' 0xFFFFFFFF x))))
+  (long (int64 (bit-and 0xFFFFFFFF x))))
 
 (defn uint32->int32
   "Converts a uint32 to an int32."

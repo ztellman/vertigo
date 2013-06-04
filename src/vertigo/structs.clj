@@ -46,8 +46,11 @@
        (f)
        (proto/internal-reduce (next byte-seq-wrapper) f (first byte-seq-wrapper)))))
 
+;; a type that, given an IPrimitiveType, can treat a byte-seq as a sequence of that type
+;; `stride` and `offset` are so that an inner type be iterated over without copying
 (deftype ByteSeqWrapper
-  [^long byte-size
+  [^long stride
+   ^long offset
    ^vertigo.structs.IPrimitiveType type
    ^vertigo.bytes.IByteSeq byte-seq]
 
@@ -60,16 +63,16 @@
   clojure.lang.Indexed
   
   (first [_]
-    (read-value type byte-seq 0))
+    (read-value type byte-seq offset))
   (next [_]
-    (when-let [byte-seq' (b/drop-bytes byte-seq byte-size)]
-      (ByteSeqWrapper. byte-size type byte-seq')))
+    (when-let [byte-seq' (b/drop-bytes byte-seq stride)]
+      (ByteSeqWrapper. stride offset type byte-seq')))
   (more [this]
     (or (next this) '()))
   (count [_]
-    (p/div (b/byte-count byte-seq) byte-size))
+    (p/div (b/byte-count byte-seq) stride))
   (nth [_ idx]
-    (read-value type byte-seq (p/* byte-size idx)))
+    (read-value type byte-seq (p/+ offset (p/* stride idx))))
   (nth [this idx default-value]
     (try
       (nth this idx)
@@ -81,9 +84,9 @@
   proto/InternalReduce
 
   (internal-reduce [_ f start]
-    (b/byte-seq-reduce byte-seq byte-size
-      (fn [byte-seq offset]
-        (read-value type byte-seq offset))
+    (b/byte-seq-reduce byte-seq stride
+      (fn [byte-seq idx]
+        (read-value type byte-seq (p/+ offset (long idx))))
       f
       start))
   
@@ -96,7 +99,7 @@
 
 (defn wrap-byte-seq
   [type byte-seq]
-  (ByteSeqWrapper. (byte-size type) type byte-seq))
+  (ByteSeqWrapper. (byte-size type) 0 type byte-seq))
 
 (defn marshal-seq
   "Converts a sequence into a marshalled version of itself."
@@ -127,7 +130,7 @@
                                          (b/lazy-byte-seq nxt))]
                           (loop [idx 0, offset 0, s s]
                             (if (or (p/== chunk-size idx) (empty? s))
-                              (b/truncate byte-seq offset)
+                              (b/slice byte-seq 0 offset)
                               (do
                                 (write-value type byte-seq offset (first s))
                                 (recur (p/inc idx) (p/+ offset stride) (rest s))))))))]
@@ -136,126 +139,193 @@
 ;;;
 
 (let [;; normal read-write
-      s (fn [r w]
+      s (fn [r w rev]
           `[(partial list '~r)
-            (partial list '~w)])
+            (partial list '~w)
+            (partial list '~rev)])
 
       ;; unsigned read-write
-      u (fn [r w conv]
+      u (fn [r w rev to-unsigned to-signed]
           `[(fn [b# idx#]
-              (list '~conv (list '~r b# idx#)))
+              (list '~to-unsigned (list '~r b# idx#)))
             (fn [b# idx# val#]
-              (list '~w b# idx# (list '~conv val#)))])]
-  (def primitive-types
-    (->>
-      [:int8    1 (s `b/get-int8 `b/put-int8)
-       :uint8   1 (u `b/get-int8 `b/put-int8 `p/int8->uint8)
-       :int16   2 (s `b/get-int16 `b/put-int16)
-       :uint16  2 (u `b/get-int16 `b/put-int16 `p/int16->uint16)
-       :int32   4 (s `b/get-int32 `b/put-int32)
-       :uint32  4 (u `b/get-int32 `b/put-int32 `p/int32->uint32)
-       :int64   8 (s `b/get-int64 `b/put-int64)
-       :uint64  8 (u `b/get-int64 `b/put-int64 `p/int64->uint64)
-       :float32 4 (s `b/get-float32 `b/put-float32)
-       :float64 8 (s `b/get-float64 `b/put-float64)]
-      (partition 3)
-      (map
-        (fn [[type size read-and-write]]
-          (let [wrapper-type (symbol (str (name type) "__seq"))
-                [read-form write-form] (eval read-and-write)]
-            [type (eval
-                    (unify-gensyms
-                      `(let [[read-form# write-form#] ~read-and-write]
-                         (reify IPrimitiveType
-                           (byte-size [_#]
-                             ~size)
-                           (fields [_#]
-                             nil)
-                           (field-offset [_# _#]
-                             (throw (IllegalArgumentException.)))
-                           (field-type [_# _#]
-                             (throw (IllegalArgumentException.)))
-                           (write-value [_# byte-seq## offset## x##]
-                             ~(write-form `byte-seq## `offset## `x##))
-                           (read-value [_# byte-seq## offset##]
-                             ~(read-form `byte-seq## `offset##))
-                           (read-form [_# b# idx#]
-                             (read-form# b# idx#))
-                           (write-form [_# b# idx# x#]
-                             (write-form# b# idx# x#))))))])))
-      (into {}))))
+              (list '~w b# idx# (list '~to-unsigned val#)))
+            (fn [x#]
+              (list '~to-unsigned (list '~rev (list '~to-signed x#))))])
+      types ['int8    1 (s `b/get-int8 `b/put-int8 `identity)
+             'uint8   1 (u `b/get-int8 `b/put-int8 `identity `p/int8->uint8 `p/uint8->int8)
+             'int16   2 (s `b/get-int16 `b/put-int16 `p/reverse-int16)
+             'uint16  2 (u `b/get-int16 `b/put-int16 `p/reverse-int16 `p/int16->uint16 `p/uint16->int16)
+             'int32   4 (s `b/get-int32 `b/put-int32 `p/reverse-int32)
+             'uint32  4 (u `b/get-int32 `b/put-int32 `p/reverse-int32 `p/int32->uint32 `p/uint32->int32)
+             'int64   8 (s `b/get-int64 `b/put-int64 `p/reverse-int64)
+             'uint64  8 (u `b/get-int64 `b/put-int64 `p/reverse-int64 `p/int64->uint64 `p/uint64->int64)
+             'float32 4 (s `b/get-float32 `b/put-float32 `p/reverse-float32)
+             'float64 8 (s `b/get-float64 `b/put-float64 `p/reverse-float64)]]
+
+  (doseq [[name size read-write-rev] (partition 3 types)]
+    (let [[read-form write-form rev-form] (eval read-write-rev)]
+      (eval
+        (unify-gensyms
+          `(let [[read-form# write-form# rev-form#] ~read-write-rev]
+
+             ;; basic primitive
+             (def ~name
+               (reify
+                 clojure.lang.Named
+                 (getName [_#] ~(str name))
+                 (getNamespace [_#] )
+
+                 IPrimitiveType
+                 (byte-size [_#]
+                   ~size)
+                 (fields [_#]
+                   nil)
+                 (field-offset [_# _#]
+                   (throw (IllegalArgumentException.)))
+                 (field-type [_# _#]
+                   (throw (IllegalArgumentException.)))
+                 (write-value [_# byte-seq## offset## x##]
+                   ~(write-form `byte-seq## `offset## `x##))
+                 (read-value [_# byte-seq## offset##]
+                   ~(read-form `byte-seq## `offset##))
+                 (read-form [_# b# idx#]
+                   (read-form# b# idx#))
+                 (write-form [_# b# idx# x#]
+                   (write-form# b# idx# x#)))))))
+
+      ;; big and little-endian primitives
+      (when-not (#{'int8 'uint8} name)
+        (doseq [[check name] (map list
+                               [`b/big-endian? `b/little-endian?]
+                               [(symbol (str name "-le")) (symbol (str name "-be"))])]
+          (eval
+            (unify-gensyms
+              `(let [[read-form# write-form# rev-form#] ~read-write-rev]
+                 (def ~name
+                   (reify
+                     clojure.lang.Named
+                     (getName [_#] ~(str name))
+                     (getNamespace [_#] )
+                     
+                     IPrimitiveType
+                     (byte-size [_#]
+                       ~size)
+                     (fields [_#]
+                       nil)
+                     (field-offset [_# _#]
+                       (throw (IllegalArgumentException.)))
+                     (field-type [_# _#]
+                       (throw (IllegalArgumentException.)))
+                     (write-value [_# byte-seq## offset## x##]
+                       (let [x## (if (~check byte-seq##)
+                                   ~(rev-form `x##)
+                                   x##)]
+                         ~(write-form `byte-seq## `offset## `x##)))
+                     (read-value [_# byte-seq## offset##]
+                       (let [x## ~(read-form `byte-seq## `offset##)]
+                         (if (~check byte-seq##)
+                           ~(rev-form `x##)
+                           x##)))
+                     (read-form [_# b# idx#]
+                       (list 'let [`x## (read-form# b# idx#)]
+                         (list 'if (list ~check b#)
+                           (rev-form# `x##)
+                           `x##)))
+                     (write-form [_# b# idx# x#]
+                       (list 'let [`x## (list 'if (list ~check b#)
+                                          (list rev-form# x#)
+                                          x#)]
+                         (write-form# b# idx# `x##)))))))))))))
 
 ;;;
 
-(defmacro def-primitive-struct [name & field+types]
+(def ^:dynamic *types*)
+
+(defn typed-struct
+  "A data structure with explicit types, meant to sit atop a byte-seq.  Fields must be keys, and types must
+   implement IPrimitiveType.  For better error messages, all structs must be named.
+
+   (typed-struct 'vec2 :x float32 :y float32)
+
+   The resulting value implements IPrimitiveType, and can be used within other typed structs."
+  [name & field+types]
+
+  (assert (even? (count field+types)))
+  
   (let [fields (->> field+types (partition 2) (map first))
-        types (->> field+types (partition 2) (map second))
-        realized-types (map
-                         #(if (keyword? %) (primitive-types %) %)
-                         types)]
+        types (->> field+types (partition 2) (map second))]
 
-    (assert (even? (count field+types)))
+    (assert (every? keyword? fields))
 
-    (doseq [[field type] (map list fields realized-types)]
+    (doseq [[field type] (map list fields types)]
       (when-not (instance? IPrimitiveType type)
         (throw (IllegalArgumentException. (str field " is not a valid type.")))))
+    
+    (let [offsets (->> types (map byte-size) (cons 0) (reductions +) butlast)
+          byte-size (->> types (map byte-size) (apply +))
+          type-syms (map #(symbol (str "t" %)) (range (count types)))]
 
-    (let [offsets (->> realized-types (map byte-size) (cons 0) (reductions +) butlast)
-          byte-size (->> realized-types (map byte-size) (apply +))
-          type-fields (map
-                        #(symbol (str "t" %))
-                        (range (count types)))]
-
-      (unify-gensyms
-        `(let [~@(interleave type-fields
-                   (map
-                     (fn [x]
-                       (if (keyword? x)
-                         `(get primitive-types ~x)
-                         x))
-                     types))]
-           (def ~name
-             (reify IPrimitiveType
-               (byte-size [_#]
-                 ~byte-size)
-               (fields [_#]
-                 ~(vec fields))
-               (field-offset [_# k#]
-                 (long
+      (binding [*types* types]
+        (eval
+          (unify-gensyms
+            `(let [~@(interleave type-syms
+                       (map
+                         (fn [x] `(nth *types* ~x))
+                         (range (count types))))]
+               (reify
+                 clojure.lang.Named
+                 (getName [_#] ~(str name))
+                 (getNamespace [_#] )
+                 
+                 IPrimitiveType
+                 (byte-size [_#]
+                   ~byte-size)
+                 (fields [_#]
+                   ~(vec fields))
+                 (field-offset [_# k#]
+                   (long
+                     (case k#
+                       ~@(interleave fields offsets))))
+                 (field-type [_# k#]
                    (case k#
-                     ~@(interleave fields offsets))))
-               (field-type [_# k#]
-                 (case k#
-                   ~@(interleave
+                     ~@(interleave
+                         fields
+                         type-syms)))
+                 (write-value [_# byte-seq## offset## x##]
+                   ~@(map
+                       (fn [k offset x]
+                         `(write-value ~x byte-seq## (p/+ (long offset##) ~offset) (get x## ~k)))
                        fields
-                       type-fields)))
-               (write-value [_# byte-seq## offset## x##]
-                 ~@(map
-                     (fn [k offset x]
-                       `(write-value ~x byte-seq## (p/+ offset## ~offset) (get x## ~k)))
-                     fields
-                     offsets
-                     type-fields))
-               (read-value [_# byte-seq# offset##]
-                 (let [byte-seq## (b/local-bytes byte-seq# 0 ~byte-size)]
-                   (reify-map-type
-                     (~'keys [_#]
-                       ~(vec fields))
-                     (~'get [_# k# default-value#]
-                       (case k#
-                         ~@(interleave
-                             fields
-                             (map
-                               (fn [x offset]
-                                 `(read-value ~x byte-seq## ~offset))
-                               type-fields
-                               offsets))
-                         default-value#))
-                     (~'assoc [this# k# v#]
-                       (assoc (into {} this#) k# v#))
-                     (~'dissoc [this# k#]
-                       (dissoc (into {} this#) k#)))))
-              (write-form [_# byte-seq# offset# x#]
-                nil)
-              (read-form [_# byte-seq# offset#]
-                nil))))))))
+                       offsets
+                       type-syms))
+                 (read-value [_# byte-seq# offset##]
+                   (let [byte-seq## (b/slice byte-seq# offset## ~byte-size)]
+
+                     ;; map structure that sits atop a slice of the byte-seq
+                     (reify-map-type
+                       (~'keys [_#]
+                         ~(vec fields))
+                       (~'get [_# k# default-value#]
+                         (case k#
+                           ~@(interleave
+                               fields
+                               (map
+                                 (fn [x offset]
+                                   `(read-value ~x byte-seq## ~offset))
+                                 type-syms
+                                 offsets))
+                           default-value#))
+                       (~'assoc [this# k# v#]
+                         (assoc (into {} this#) k# v#))
+                       (~'dissoc [this# k#]
+                         (dissoc (into {} this#) k#)))))
+                 (write-form [_# byte-seq# offset# x#]
+                   nil)
+                 (read-form [_# byte-seq# offset#]
+                   nil)))))))))
+
+(defmacro def-typed-struct
+
+  [name & field+types]
+  `(def ~name (typed-struct name ~@field+types)))
