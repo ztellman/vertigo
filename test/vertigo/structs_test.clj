@@ -76,9 +76,9 @@
         ms (s/marshal-seq vec2 s)]
 
     (s/update-in! ^vec2 ms [0 :x] p/inc)
-    (is (= 1 (get-in ms [0 :x])))
+    (is (= 1 (get-in ms [0 :x]) (s/get-in* ^vec2 ms [0 :x])))
     (s/set-in! ^vec2 ms [0 :x] 10)
-    (is (= 10 (get-in ms [0 :x])))))
+    (is (= 10 (get-in ms [0 :x]) (s/get-in* ^vec2 ms [0 :x])))))
 
 ;;;
 
@@ -122,17 +122,25 @@
     (bench "lazily marshal 1000 shorts"
       (s/lazily-marshal-seq s/int16 s))))
 
-(deftest ^:benchmark benchmark-updates
+(deftest ^:benchmark benchmark-accessors
   (let [s (map
             #(hash-map :x %1 :y %2)
             (range 1)
             (repeat 1 (range 10)))
         ms (s/marshal-seq vec2 s)]
 
-    (bench "mutable update nested structure"
-      (s/update-in! ^vec2 ms [0 :y 0] p/inc)))
+    (batch-bench "mutable update nested structure"
+      (s/update-in! ^vec2 ms [0 :y 0] p/inc))
+    (batch-bench "mutable get nested structure"
+      (s/get-in* ^vec2 ms [0 :y 0]))
+    (batch-bench "mutable set nested structure"
+      (s/set-in! ^vec2 ms [0 :y 0] 0)))
 
   (let [s [{:x 0 :y (vec (range 10))}]]
 
-    (bench "persistent update nested structure"
-      (update-in s [0 :y 0] inc))))
+    (batch-bench "persistent update nested structure"
+      (update-in s [0 :y 0] inc))
+    (batch-bench "persistent get nested structure"
+      (get-in s [0 :y 0] inc))
+    (batch-bench "persistent set nested structure"
+      (assoc-in s [0 :y 0] 0))))

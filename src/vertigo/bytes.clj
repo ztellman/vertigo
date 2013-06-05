@@ -34,15 +34,13 @@
   (put-int64 [_ ^long idx ^long val])
   (put-float32 [_ ^long idx ^double val])
   (put-float64 [_ ^long idx ^double val])
-
   (byte-count ^long [_])
   (drop-bytes [_ ^long n])
+
   (slice [_ ^long offset ^long len])
   (unwrap-buffers [_])
-
   (byte-order [_])
   (set-byte-order! [_ order])
-
   (byte-seq-reduce [_ stride read-fn f start]))
 
 (defn big-endian?
@@ -103,7 +101,7 @@
       (slice this n (- (.remaining buf) n))))
 
   (slice [_ offset len]
-    (ByteSeq. (slice-buffer buf offset len))))
+    (ByteSeq. (slice-buffer buf offset len)))) 
 
 ;;;
 

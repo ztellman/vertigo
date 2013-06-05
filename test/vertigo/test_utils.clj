@@ -19,5 +19,5 @@
   `(do
      (println "\n-----\n" ~name "\n-----\n")
      (c/quick-bench
-       (dotimes [_# 1000] ~@body)
+       (dotimes [_# 1e6] ~@body)
        :reduce-with #(and %1 %2))))

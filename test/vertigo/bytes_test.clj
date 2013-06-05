@@ -98,13 +98,13 @@
     (t/batch-bench "raw indirect byte-buffer: get and put"
       (.putLong buf 0 (p/inc (.getLong buf 0))))))
 
-#_(deftest ^:benchmark benchmark-array
+(deftest ^:benchmark benchmark-array
   (let [ary (long-array 1)]
-    (t/batch-bench "raw direct byte-buffer: get"
+    (t/batch-bench "array: get"
       (aget ary 0))
-    (t/batch-bench "raw direct byte-buffer: put"
+    (t/batch-bench "arrat: put"
       (aset ary 0 0))
-    (t/batch-bench "raw direct byte-buffer: get and put"
+    (t/batch-bench "array: get and put"
       (aset ary 0 (p/inc (long (aget ary 0)))))))
 
 (deftest ^:benchmark benchmark-byte-seq
@@ -123,7 +123,7 @@
     (t/batch-bench "indirect byte-seq: get and put"
       (b/put-int64 bs 0 (p/inc (b/get-int64 bs 0))))))
 
-#_(deftest ^:benchmark benchmark-chunked-byte-seq
+(deftest ^:benchmark benchmark-chunked-byte-seq
   (let [bs (-> (ByteBuffer/allocateDirect 40) b/byte-seq (->chunked 8))]
     (t/batch-bench "chunked-byte-seq first chunk: get"
       (b/get-int64 bs 0))

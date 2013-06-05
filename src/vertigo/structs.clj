@@ -82,27 +82,34 @@
              inner-type `x## `(unwrap-byte-seq x##) `(p/+ (index-offset x## ~(first fields)) ~@offsets)))))))
 
 (defmacro get-in*
-
-  [x fields]
-  (field-operation "get-in*" x fields
+  "Like `get-in`, but for sequences of typed-structs. The sequence `s` must be type-hinted with the element type,
+   which allows for compile-time calculation of the offset, and validation of the lookup."
+  [s fields]
+  (field-operation "get-in*" s fields
     (fn [type seq byte-seq offset]
       (read-form type byte-seq offset))
     (fn [type seq byte-seq offset]
       `(read-value (element-type ~seq) ~byte-seq ~offset))))
 
 (defmacro set-in!
+  "Like `assoc-in`, but for sequences of typed-structs. The sequence `s` must be type-hinted with the element type,
+   which allows for compile-time calculation of the offset, and validation of the lookup.
 
-  [x fields val]
-  (field-operation "set-in!" x fields
+   This is a mutable operation, which writes over values in-place."
+  [s fields val]
+  (field-operation "set-in!" s fields
     (fn [type seq byte-seq offset]
       (write-form type byte-seq offset val))
     (fn [type seq byte-seq offset]
       `(write-value (element-type ~seq) ~byte-seq ~offset ~val))))
 
 (defmacro update-in!
+  "Like `update-in`, but for sequences of typed-structs. The sequence `s` must be type-hints with the element type,
+   which allows for compile-time calculation of the offset, and validation of the lookup.
 
-  [x fields f & args]
-  (field-operation "update-in!" x fields
+   This is a mutable operation, which writes over values in-place."
+  [s fields f & args]
+  (field-operation "update-in!" s fields
     (fn [type seq byte-seq offset]
       `(let [offset## ~offset
              byte-seq## ~byte-seq
