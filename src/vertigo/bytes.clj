@@ -57,31 +57,33 @@
 
 ;;;
 
-(deftype+ ByteSeq
-  [^ByteBuffer buf
-   ^long offset
-   ^long limit]
-  IByteSeq
-  (get-int8 [this idx]     (long (.get buf (int (+ offset idx)))))
-  (get-int16 [this idx]    (long (.getShort buf (int (+ offset idx)))))
-  (get-int32 [this idx]    (long (.getInt buf (int (+ offset idx)))))
-  (get-int64 [this idx]    (.getLong buf (int (+ offset idx))))
-  (get-float32 [this idx]  (double (.getFloat buf (int (+ offset idx)))))
-  (get-float64 [this idx]  (.getDouble buf (int (+ offset idx))))
+(defn slice-buffer [^ByteBuffer buf ^long offset ^long len]
+  (let [order (.order buf)]
+    (-> buf .duplicate (.position offset) ^ByteBuffer (.limit (+ offset len)) .slice (.order order))))
 
-  (put-int8 [this idx val]     (.put buf (int (+ offset idx)) val) nil)
-  (put-int16 [this idx val]    (.putShort buf (int (+ offset idx)) val) nil)
-  (put-int32 [this idx val]    (.putInt buf (int (+ offset idx)) val) nil)
-  (put-int64 [this idx val]    (.putLong buf (int (+ offset idx)) val) nil)
-  (put-float32 [this idx val]  (.putFloat buf (int (+ offset idx)) val) nil)
-  (put-float64 [this idx val]  (.putDouble buf (int (+ offset idx)) val) nil)
+(deftype+ ByteSeq
+  [^ByteBuffer buf]
+  IByteSeq
+  (get-int8 [this idx]     (long (.get buf idx)))
+  (get-int16 [this idx]    (long (.getShort buf idx)))
+  (get-int32 [this idx]    (long (.getInt buf idx)))
+  (get-int64 [this idx]    (.getLong buf idx))
+  (get-float32 [this idx]  (double (.getFloat buf idx)))
+  (get-float64 [this idx]  (.getDouble buf idx))
+
+  (put-int8 [this idx val]     (.put buf idx val))
+  (put-int16 [this idx val]    (.putShort buf idx val))
+  (put-int32 [this idx val]    (.putInt buf idx val))
+  (put-int64 [this idx val]    (.putLong buf idx val))
+  (put-float32 [this idx val]  (.putFloat buf idx val))
+  (put-float64 [this idx val]  (.putDouble buf idx val))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
 
  (byte-seq-reduce [this stride read-fn f start]
     (let [stride (long stride)
-          size (long (- limit offset))]
+          size (.remaining buf)]
       (loop [idx 0, val start]
         (if (<= size idx)
           val
@@ -94,17 +96,14 @@
     [buf])
 
   (byte-count [_]
-    (- limit offset))
+    (.remaining buf))
 
-  (drop-bytes [_ n]
-    (let [idx' (+ offset n)]
-      (when (< idx' limit)
-        (ByteSeq. buf idx' limit))))
+  (drop-bytes [this n]
+    (when (< n (.remaining buf))
+      (slice this n (- (.remaining buf) n))))
 
-  (slice [_ offset' len]
-    (when (< limit (+ offset offset' len)) 
-      (throw (IllegalArgumentException. "slice length must be less than or equal to the size of the byte-seq")))
-    (ByteSeq. buf (+ offset offset') (+ offset offset' len))))
+  (slice [_ offset len]
+    (ByteSeq. (slice-buffer buf offset len))))
 
 ;;;
 
@@ -137,7 +136,7 @@
   (seq [this]
     this)
   (first [_]
-    (ByteSeq. buf offset limit))
+    (ByteSeq. (slice-buffer buf offset (- limit offset))))
   (next [this]
     (let [nxt (when-not (nil? next-chunk) @next-chunk)]
       (when-not (nil? nxt)
@@ -240,7 +239,7 @@
 
 (defn byte-seq
   [^ByteBuffer buf]
-  (ByteSeq. (with-native-order buf) 0 (.remaining buf)))
+  (ByteSeq. (with-native-order buf)))
 
 (defn array->buffer
   ([ary]
@@ -250,7 +249,7 @@
 
 (defn array->direct-buffer
   ([ary]
-     (array->buffer ary 0 (Array/getLength ^bytes ary)))
+     (array->direct-buffer ary 0 (Array/getLength ^bytes ary)))
   ([ary ^long offset ^long length]
      (let [^ByteBuffer buf (with-native-order (ByteBuffer/allocateDirect length))]
        (.put buf ary offset length)

@@ -7,15 +7,17 @@
     [vertigo.primitives :as p])
   (:import
     [java.nio
-     ByteBuffer]))
+     ByteBuffer]
+    [clojure.lang
+     Compiler$LocalBinding]))
 
 ;;;
 
 (definterface+ IPrimitiveType
   (byte-size ^long [_]
     "The size of the primitive type, in bytes.")
-  (fields [_]
-    "The fields in the primitive struct.")
+  (has-field? [_ x]
+    "Returns true if the type has the given field, false otherwise")
   (field-offset ^long [_ x]
     "Returns of the offset of the field within the struct, in bytes.")
   (field-type [_ x]
@@ -32,7 +34,88 @@
     "Returns an eval'able form for writing the struct to a byte-seq."))
 
 (definterface+ IByteSeqWrapper
-  (unwrap-byte-seq [_]))
+  (index-offset ^long [_ ^long idx]
+    )
+  (element-type [_]
+    )
+  (unwrap-byte-seq [_]
+    ))
+
+;;;
+
+(defn- inner-type
+  [type fields]
+  (let [[type offsets] (reduce
+                         (fn [[type offsets] field]
+                           (cond
+
+                             ;; symbol, assumed to be an index
+                             (not (or (number? field) (keyword? field)))
+                             (if-not (has-field? type 0)
+                               (throw (IllegalArgumentException. (str "'" field "' is assumed to be numeric, which isn't accepted by " (name type))))
+                               [(field-type type field) (conj offsets `(p/* ~(field-offset type 1) ~field))])
+
+                             ;; keyword or number
+                             (has-field? type field)
+                             [(field-type type field) (conj offsets (field-offset type field))]
+
+                             :else
+                             (throw (IllegalArgumentException. (str "Invalid field '" field "' for type " (name type))))))
+                         [type []]
+                         fields)]
+    [type (cons
+            (->> offsets (filter number?) (apply +))
+            (->> offsets (remove number?)))]))
+
+(defn- field-operation [op-name x fields inlined-form non-inlined-form]
+  (let [type (if-let [type (:tag (meta x))]
+               @(resolve type)
+               (throw (IllegalArgumentException. (str "First argument to " op-name  " must be hinted with element type"))))]
+
+    (let [[inner-type offsets] (inner-type type (rest fields))
+          x (with-meta x {})]
+      (unify-gensyms
+        `(let [x## ~x]
+           ~((if (instance? IPrimitiveInlinedType inner-type)
+               inlined-form
+               non-inlined-form)
+             inner-type `x## `(unwrap-byte-seq x##) `(p/+ (index-offset x## ~(first fields)) ~@offsets)))))))
+
+(defmacro get-in*
+
+  [x fields]
+  (field-operation "get-in*" x fields
+    (fn [type seq byte-seq offset]
+      (read-form type byte-seq offset))
+    (fn [type seq byte-seq offset]
+      `(read-value (element-type ~seq) ~byte-seq ~offset))))
+
+(defmacro set-in!
+
+  [x fields val]
+  (field-operation "set-in!" x fields
+    (fn [type seq byte-seq offset]
+      (write-form type byte-seq offset val))
+    (fn [type seq byte-seq offset]
+      `(write-value (element-type ~seq) ~byte-seq ~offset ~val))))
+
+(defmacro update-in!
+
+  [x fields f & args]
+  (field-operation "update-in!" x fields
+    (fn [type seq byte-seq offset]
+      `(let [offset## ~offset
+             byte-seq## ~byte-seq
+             val## ~(read-form type `byte-seq## `offset##)
+             val'## (~f val## ~@args)]
+         ~(write-form type `byte-seq## `offset## `val'##)))
+    (fn [type seq byte-seq offset]
+      (let [offset# ~offset
+            byte-seq# ~byte-seq
+            element-type# (element-type ~seq)
+            val# (read-value element-type# byte-seq# offset#)
+            val'# (~f val# ~@args)]
+        (write-value element-type# byte-seq# offset# val'#)))))
 
 ;;;
 
@@ -64,6 +147,7 @@
 
   (doseq [[name size read-write-rev] (partition 3 types)]
     (let [[read-form write-form rev-form] (eval read-write-rev)]
+
       (eval
         (unify-gensyms
           `(let [[read-form# write-form# rev-form#] ~read-write-rev]
@@ -78,8 +162,8 @@
                  IPrimitiveType
                  (byte-size [_#]
                    ~size)
-                 (fields [_#]
-                   nil)
+                 (has-field? [_# _#]
+                   false)
                  (field-offset [_# _#]
                    (throw (IllegalArgumentException.)))
                  (field-type [_# _#]
@@ -100,6 +184,7 @@
         (doseq [[check name] (map list
                                [`b/big-endian? `b/little-endian?]
                                [(symbol (str name "-le")) (symbol (str name "-be"))])]
+
           (eval
             (unify-gensyms
               `(let [[read-form# write-form# rev-form#] ~read-write-rev]
@@ -107,13 +192,13 @@
                    (reify
                      clojure.lang.Named
                      (getName [_#] ~(str name))
-                     (getNamespace [_#] )
+                     (getNamespace [_#] ~(str *ns*))
                      
                      IPrimitiveType
                      (byte-size [_#]
                        ~size)
-                     (fields [_#]
-                       nil)
+                     (has-field? [_# _#]
+                       false)
                      (field-offset [_# _#]
                        (throw (IllegalArgumentException.)))
                      (field-type [_# _#]
@@ -179,13 +264,13 @@
                (reify
                  clojure.lang.Named
                  (getName [_#] ~(str name))
-                 (getNamespace [_#] )
+                 (getNamespace [_#] ~(str *ns*))
                  
                  IPrimitiveType
                  (byte-size [_#]
                    ~byte-size)
-                 (fields [_#]
-                   ~(vec fields))
+                 (has-field? [_# x#]
+                   (boolean (~(set fields) x#)))
                  (field-offset [_# k#]
                    (long
                      (case k#
@@ -227,7 +312,7 @@
 (defmacro def-typed-struct
   "Like `typed-struct`, but defines a var."
   [name & field+types]
-  `(def ~name (typed-struct name ~@field+types)))
+  `(def ~name (typed-struct '~name ~@field+types)))
 
 ;;;
 
@@ -249,11 +334,14 @@
 
   IByteSeqWrapper
   (unwrap-byte-seq [_] byte-seq)
+  (element-type [_] type)
+  (index-offset [_ idx] (p/+ offset (p/* idx stride)))
 
   clojure.lang.ISeq
   clojure.lang.Seqable
   clojure.lang.Sequential
   clojure.lang.Indexed
+  clojure.lang.ILookup
   
   (first [_]
     (read-value type byte-seq offset))
@@ -271,8 +359,21 @@
       (nth this idx)
       (catch IndexOutOfBoundsException e
         default-value)))
+  (valAt [this idx]
+    (nth this idx))
+  (valAt [this idx not-found]
+    (nth this idx not-found))
   (seq [this]
     this)
+  (equiv [this x]
+    (if-not (sequential? x)
+      false
+      (loop [a this, b (seq x)]
+        (if (or (empty? a) (empty? b))
+          (and (empty? a) (empty? b))
+          (if (= (first a) (first b))
+            (recur (rest a) (rest b))
+            false)))))
 
   proto/InternalReduce
 
@@ -313,6 +414,7 @@
     (wrap-byte-seq type byte-seq)))
 
 (defn lazily-marshal-seq
+  "Lazily converst a sequence into a marshalled version of itself."
   ([type s]
      (lazily-marshal-seq type 4096 s))
   ([type ^long chunk-byte-size s]
@@ -334,26 +436,24 @@
 
 ;;;
 
-(defn- assert-bounds [idx len]
-  (when-not (<= 0 idx (dec len))
-    (throw (IndexOutOfBoundsException. (str idx)))))
-
 (deftype PrimitiveTypeArray
   [type
    ^long len
    ^long offset
    ^long stride]
 
+  clojure.lang.Named
+  (getName [_] (str (name type) "[" len "]"))
+  (getNamespace [_] "")
+
   IPrimitiveType
   (byte-size [_]
     (p/* len stride))
-  (fields [_]
-    (range len))
+  (has-field? [_ idx]
+    (and (number? idx) (<= 0 idx (dec len))))
   (field-type [_ idx]
-    (assert-bounds idx)
     type)
   (field-offset [_ idx]
-    (assert-bounds idx)
     (p/* (long idx) stride))
   (read-value [_ buf offset']
     (wrap-byte-seq
