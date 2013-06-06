@@ -1,12 +1,12 @@
 Vertigo allows you to define mixed-type struct over byte-buffers which can be used like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.
 
-h3. usage
+### usage
 
 ```clj
 [vertigo "0.1.0-SNAPSHOT"]
 ```
 
-h3. defining a type
+### defining a type
 
 To define a typed structure, we use `vertigo.structs/def-typed-struct`:
 
@@ -42,7 +42,7 @@ We can also define a fixed-length array of any type using `(array type length)`:
   :floats (array float32 10))
 ```
 
-h3. creating a sequence
+### creating a sequence
 
 To create a sequence, we can either _marshal_ an existing sequence onto a byte-buffer, or _wrap_ an existing byte source.  To marshal a sequence, we can either use `vertigo.structs/marshal-seq` or `vertigo.structs/lazily-marshal-seq`:
 
@@ -66,7 +66,7 @@ Using `marshal-seq` will realize and copy over the entire sequence at once.  For
 
 To create a sequence that wraps an already encoded source of bytes, you may use `vertigo.io/wrap-input-stream`, `vertigo.io/wrap-buffer`, et al.
 
-h3. interacting with a sequence
+### interacting with a sequence
 
 While we can use `first`, `rest`, `nth`, `get-in` and all the other normal Clojure functions on these sequences, we can also do something other data structures can't.  Consider the above example of a map containing sequences of ints and floats.  To get the fifth element under the `:floats` key, we call `(get-in s [:floats 4])`.  This will first get the sequence under the `:floats` key, and then look for the fifth element within the sequence.  
 
