@@ -1,4 +1,4 @@
-Vertigo allows you to define mixed-type struct over byte-buffers which can be used like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.
+Vertigo allows you to define mixed-type structs over byte-buffers which can be used like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.
 
 ### usage
 
