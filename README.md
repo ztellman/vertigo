@@ -27,7 +27,7 @@ Each field is defined as a pair: a name and a type.  The resulting typed-struct 
   :b vec3)
 ```
 
-In the `vertigo.structs` namespace, there are a number of predefined primitive types, including `int8`, `int16`, `int32`, `int64`, `float32`, and `float64`.  Any integer type can be made unsigned by adding a `u` suffix, and all primitive types can have an `-le` or `-be` suffix for explicit endianness.  Without a suffix, the endianness will default to that of the underlying buffer.
+In the `vertigo.structs` namespace, there are a number of predefined primitive types, including `int8`, `int16`, `int32`, `int64`, `float32`, and `float64`.  Any integer type can be made unsigned by adding a `u` prefix, and all primitive types can have an `-le` or `-be` suffix for explicit endianness.  Without a suffix, the endianness will default to that of the underlying buffer.
 
 We can also define a fixed-length array of any type using `(array type length)`:
 
@@ -39,7 +39,7 @@ We can also define a fixed-length array of any type using `(array type length)`:
 
 ### creating a sequence
 
-To create a sequence, we can either _marshal_ an existing sequence onto a byte-buffer, or _wrap_ an existing byte source.  To marshal a sequence, we can either use `vertigo.structs/marshal-seq` or `vertigo.structs/lazily-marshal-seq`:
+To create a sequence, we can either **marshal** an existing sequence onto a byte-buffer, or **wrap** an existing byte source.  To marshal a sequence, we can either use `vertigo.structs/marshal-seq` or `vertigo.structs/lazily-marshal-seq`:
 
 ```clj
 > (def s (range 5))
