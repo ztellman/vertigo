@@ -8,21 +8,23 @@
 
 ;;;
 
-(definterface+ IPrimitiveType
+(definterface+ IFixedType
   (byte-size ^long [_]
     "The size of the primitive type, in bytes.")
-  (has-field? [_ x]
-    "Returns true if the type has the given field, false otherwise")
-  (field-offset ^long [_ x]
-    "Returns of the offset of the field within the struct, in bytes.")
-  (field-type [_ x]
-    "Returns the type of the field.")
   (write-value [_ byte-seq ^long offset x]
     "Writes the value to a byte-seq at the given byte offset.")
   (read-value [_ byte-seq ^long offset]
     "Reads the value from a byte-seq at the given byte-offset."))
 
-(definterface+ IPrimitiveInlinedType
+(definterface+ IFixedCompoundType
+  (has-field? [_ x]
+    "Returns true if the type has the given field, false otherwise")
+  (field-offset ^long [_ x]
+    "Returns of the offset of the field within the struct, in bytes.")
+  (field-type [_ x]
+    "Returns the type of the field."))
+
+(definterface+ IFixedInlinedType
   (read-form [_ byte-seq idx]
     "Returns an eval'able form for reading the struct off a byte-seq.")
   (write-form [_ byte-seq idx val]
@@ -40,24 +42,28 @@
 
 (defn- inner-type
   [type fields]
-  (let [[type offsets] (reduce
-                         (fn [[type offsets] field]
-                           (cond
+  (let [[type offsets]
+        (reduce
+          (fn [[type offsets] field]
+            (cond
 
-                             ;; symbol, assumed to be an index
-                             (not (or (number? field) (keyword? field)))
-                             (if-not (has-field? type 0)
-                               (throw (IllegalArgumentException. (str "'" field "' is assumed to be numeric, which isn't accepted by " (name type))))
-                               [(field-type type field) (conj offsets `(p/* ~(field-offset type 1) ~field))])
-
-                             ;; keyword or number
-                             (has-field? type field)
-                             [(field-type type field) (conj offsets (field-offset type field))]
-
-                             :else
-                             (throw (IllegalArgumentException. (str "Invalid field '" field "' for type " (name type))))))
-                         [type []]
-                         fields)]
+              (not (instance? IFixedCompoundType type))
+              (throw (IllegalArgumentException. (str "Invalid field '" field "' for non-compound type " (name type))))
+              
+              ;; symbol, assumed to be an index
+              (not (or (number? field) (keyword? field)))
+              (if-not (has-field? type 0)
+                (throw (IllegalArgumentException. (str "'" field "' is assumed to be numeric, which isn't accepted by " (name type))))
+                [(field-type type field) (conj offsets `(p/* ~(field-offset type 1) ~field))])
+              
+              ;; keyword or number
+              (has-field? type field)
+              [(field-type type field) (conj offsets (field-offset type field))]
+              
+              :else
+              (throw (IllegalArgumentException. (str "Invalid field '" field "' for type " (name type))))))
+          [type []]
+          fields)]
     [type (cons
             (->> offsets (filter number?) (apply +))
             (->> offsets (remove number?)))]))
@@ -71,7 +77,7 @@
           x (with-meta x {})]
       (unify-gensyms
         `(let [x## ~x]
-           ~((if (instance? IPrimitiveInlinedType inner-type)
+           ~((if (instance? IFixedInlinedType inner-type)
                inlined-form
                non-inlined-form)
              inner-type `x## `(unwrap-byte-seq x##) `(p/+ (index-offset x## ~(first fields)) ~@offsets)))))))
@@ -94,9 +100,13 @@
   [s fields val]
   (field-operation "set-in!" s fields
     (fn [type seq byte-seq offset]
-      (write-form type byte-seq offset val))
+      `(do
+         ~(write-form type byte-seq offset val)
+         nil))
     (fn [type seq byte-seq offset]
-      `(write-value (element-type ~seq) ~byte-seq ~offset ~val))))
+      `(do
+         (write-value (element-type ~seq) ~byte-seq ~offset ~val)
+         nil))))
 
 (defmacro update-in!
   "Like `update-in`, but for sequences of typed-structs. The sequence `s` must be type-hints with the element type,
@@ -110,14 +120,16 @@
              byte-seq## ~byte-seq
              val## ~(read-form type `byte-seq## `offset##)
              val'## (~f val## ~@args)]
-         ~(write-form type `byte-seq## `offset## `val'##)))
+         ~(write-form type `byte-seq## `offset## `val'##)
+         nil))
     (fn [type seq byte-seq offset]
       (let [offset# ~offset
             byte-seq# ~byte-seq
             element-type# (element-type ~seq)
             val# (read-value element-type# byte-seq# offset#)
             val'# (~f val# ~@args)]
-        (write-value element-type# byte-seq# offset# val'#)))))
+        (write-value element-type# byte-seq# offset# val'#)
+        nil))))
 
 ;;;
 
@@ -161,21 +173,15 @@
                  (getName [_#] ~(str name))
                  (getNamespace [_#] )
 
-                 IPrimitiveType
+                 IFixedType
                  (byte-size [_#]
                    ~size)
-                 (has-field? [_# _#]
-                   false)
-                 (field-offset [_# _#]
-                   (throw (IllegalArgumentException.)))
-                 (field-type [_# _#]
-                   (throw (IllegalArgumentException.)))
                  (write-value [_# byte-seq## offset## x##]
                    ~(write-form `byte-seq## `offset## `x##))
                  (read-value [_# byte-seq## offset##]
                    ~(read-form `byte-seq## `offset##))
 
-                 IPrimitiveInlinedType
+                 IFixedInlinedType
                  (read-form [_# b# idx#]
                    (read-form# b# idx#))
                  (write-form [_# b# idx# x#]
@@ -196,15 +202,9 @@
                      (getName [_#] ~(str name))
                      (getNamespace [_#] ~(str *ns*))
                      
-                     IPrimitiveType
+                     IFixedType
                      (byte-size [_#]
                        ~size)
-                     (has-field? [_# _#]
-                       false)
-                     (field-offset [_# _#]
-                       (throw (IllegalArgumentException.)))
-                     (field-type [_# _#]
-                       (throw (IllegalArgumentException.)))
                      (write-value [_# byte-seq## offset## x##]
                        (let [x## (if (~check byte-seq##)
                                    ~(rev-form `x##)
@@ -216,7 +216,7 @@
                            ~(rev-form `x##)
                            x##)))
 
-                     IPrimitiveInlinedType
+                     IFixedInlinedType
                      (read-form [_# b# idx#]
                        (list 'let [`x## (read-form# b# idx#)]
                          (list 'if (list ~check b#)
@@ -234,11 +234,11 @@
 
 (defn typed-struct
   "A data structure with explicit types, meant to sit atop a byte-seq.  Fields must be keys, and types must
-   implement IPrimitiveType.  For better error messages, all structs must be named.
+   implement IFixedType.  For better error messages, all structs must be named.
 
    (typed-struct 'vec2 :x float32 :y float32)
 
-   The resulting value implements IPrimitiveType, and can be used within other typed-structs."
+   The resulting value implements IFixedType, and can be used within other typed-structs."
   [name & field+types]
 
   (assert (even? (count field+types)))
@@ -249,7 +249,7 @@
     (assert (every? keyword? fields))
 
     (doseq [[field type] (map list fields types)]
-      (when-not (instance? IPrimitiveType type)
+      (when-not (instance? IFixedType type)
         (throw (IllegalArgumentException. (str field " is not a valid type.")))))
     
     (let [offsets (->> types (map byte-size) (cons 0) (reductions +) butlast)
@@ -267,10 +267,8 @@
                  clojure.lang.Named
                  (getName [_#] ~(str name))
                  (getNamespace [_#] ~(str *ns*))
-                 
-                 IPrimitiveType
-                 (byte-size [_#]
-                   ~byte-size)
+
+                 IFixedCompoundType
                  (has-field? [_# x#]
                    (boolean (~(set fields) x#)))
                  (field-offset [_# k#]
@@ -282,6 +280,10 @@
                      ~@(interleave
                          fields
                          type-syms)))
+                 
+                 IFixedType
+                 (byte-size [_#]
+                   ~byte-size)
                  (write-value [_# byte-seq## offset## x##]
                    ~@(map
                        (fn [k offset x]
@@ -326,12 +328,12 @@
        (f)
        (proto/internal-reduce (next byte-seq-wrapper) f (first byte-seq-wrapper)))))
 
-;; a type that, given an IPrimitiveType, can treat a byte-seq as a sequence of that type
+;; a type that, given an IFixedType, can treat a byte-seq as a sequence of that type
 ;; `stride` and `offset` are so that an inner type be iterated over without copying
 (deftype ByteSeqWrapper
   [^long stride
    ^long offset
-   ^vertigo.structs.IPrimitiveType type
+   ^vertigo.structs.IFixedType type
    ^vertigo.bytes.IByteSeq byte-seq]
 
   java.io.Closeable
@@ -441,7 +443,7 @@
 
 ;;;
 
-(deftype PrimitiveTypeArray
+(deftype FixedTypeArray
   [type
    ^long len
    ^long offset
@@ -451,15 +453,17 @@
   (getName [_] (str (name type) "[" len "]"))
   (getNamespace [_] "")
 
-  IPrimitiveType
-  (byte-size [_]
-    (p/* len stride))
+  IFixedCompoundType
   (has-field? [_ idx]
     (and (number? idx) (<= 0 idx (dec len))))
   (field-type [_ idx]
     type)
   (field-offset [_ idx]
     (p/* (long idx) stride))
+
+  IFixedType
+  (byte-size [_]
+    (p/* len stride))
   (read-value [_ buf offset']
     (wrap-byte-seq
       type stride offset
@@ -473,4 +477,4 @@
 (defn array
   "Returns a type representing an array of `type` with length `len`."
   [type ^long len]
-  (PrimitiveTypeArray. type len 0 (byte-size type)))
+  (FixedTypeArray. type len 0 (byte-size type)))
