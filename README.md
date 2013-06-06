@@ -1,5 +1,7 @@
 Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.
 
+This is alpha-quality software, and is subject to bugs and changes.
+
 ### usage
 
 ```clj
