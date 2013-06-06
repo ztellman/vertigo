@@ -27,12 +27,7 @@ Each field is defined as a pair: a name and a type.  The resulting typed-struct 
   :b vec3)
 ```
 
-In the `vertigo.structs` namespace, there are a number of predefined primitive types: 
-
-* `int8`, `int16`, `int32`, `int64`
-** for unsigned variants, use `uint8`, etc.
-* `float32`, `float64`
-* add an `-le` or `-be` suffix to any primitive type for explicit endianness, otherwise it will default to the endianness of the underlying buffer
+In the `vertigo.structs` namespace, there are a number of predefined primitive types, including `int8`, `int16`, `int32`, `int64`, `float32`, and `float64`.  Any integer type can be made unsigned by adding a `u` suffix, and all primitive types can have an `-le` or `-be` suffix for explicit endianness.  Without a suffix, the endianness will default to that of the underlying buffer.
 
 We can also define a fixed-length array of any type using `(array type length)`:
 
