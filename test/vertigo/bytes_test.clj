@@ -38,7 +38,7 @@
       (range cnt))))
 
 (defn byte-seq->input-stream [^ByteSeq byte-seq]
-  (ByteArrayInputStream. (b/buffer->byte-array (.buf byte-seq))))
+  (ByteArrayInputStream. (b/buffer->array (.buf byte-seq))))
 
 (defn ->chunked [byte-seq chunk-size]
   (-> byte-seq byte-seq->input-stream (b/input-stream->byte-seq chunk-size)))

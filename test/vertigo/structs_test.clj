@@ -42,7 +42,7 @@
               (range 10))]
       (is (= s (s/marshal-seq typ s)))
       (is (= s (s/lazily-marshal-seq typ s)))
-      (is (= s (s/lazily-marshal-seq typ 32 s))))))
+      (is (= s (s/lazily-marshal-seq typ 32 false s))))))
 
 (s/def-typed-struct vec2
   :x s/int32

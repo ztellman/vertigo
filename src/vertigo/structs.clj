@@ -4,12 +4,7 @@
   (:require
     [clojure.core.protocols :as proto]
     [vertigo.bytes :as b]
-    [vertigo.primitives :as p])
-  (:import
-    [java.nio
-     ByteBuffer]
-    [clojure.lang
-     Compiler$LocalBinding]))
+    [vertigo.primitives :as p]))
 
 ;;;
 
@@ -35,11 +30,11 @@
 
 (definterface+ IByteSeqWrapper
   (index-offset ^long [_ ^long idx]
-    )
+    "Returns the byte offset of the given index within the byte-seq-wrapper.")
   (element-type [_]
-    )
+    "Returns the type of the elements within the seq.")
   (unwrap-byte-seq [_]
-    ))
+    "Returns the byte-seq within the wrapper."))
 
 ;;;
 
@@ -243,7 +238,7 @@
 
    (typed-struct 'vec2 :x float32 :y float32)
 
-   The resulting value implements IPrimitiveType, and can be used within other typed structs."
+   The resulting value implements IPrimitiveType, and can be used within other typed-structs."
   [name & field+types]
 
   (assert (even? (count field+types)))
@@ -339,6 +334,10 @@
    ^vertigo.structs.IPrimitiveType type
    ^vertigo.bytes.IByteSeq byte-seq]
 
+  java.io.Closeable
+  (close [_]
+    (.close ^java.io.Closeable byte-seq))
+  
   IByteSeqWrapper
   (unwrap-byte-seq [_] byte-seq)
   (element-type [_] type)
@@ -407,32 +406,31 @@
 
 (defn marshal-seq
   "Converts a sequence into a marshalled version of itself."
-  [type s]
-  (let [cnt (count s)
-        stride (byte-size type)
-        byte-seq (-> (long cnt)
-                   (p/* (long stride))
-                   ByteBuffer/allocateDirect
-                   b/byte-seq)]
-    (loop [offset 0, s s]
-      (when-not (empty? s)
-        (write-value type byte-seq offset (first s))
-        (recur (p/+ offset stride) (rest s))))
-    (wrap-byte-seq type byte-seq)))
+  ([type s]
+     (marshal-seq type true s))
+  ([type direct? s]
+     (let [cnt (count s)
+           stride (byte-size type)
+           allocate (if direct? b/direct-buffer b/buffer)
+           byte-seq (-> (long cnt) (p/* (long stride)) allocate b/byte-seq)]
+       (loop [offset 0, s s]
+         (when-not (empty? s)
+           (write-value type byte-seq offset (first s))
+           (recur (p/+ offset stride) (rest s))))
+       (wrap-byte-seq type byte-seq))))
 
 (defn lazily-marshal-seq
   "Lazily converst a sequence into a marshalled version of itself."
   ([type s]
-     (lazily-marshal-seq type 4096 s))
-  ([type ^long chunk-byte-size s]
+     (lazily-marshal-seq type 4096 false s))
+  ([type ^long chunk-byte-size direct? s]
      (let [stride (byte-size type)
            chunk-size (p/div chunk-byte-size stride)
+           allocate (if direct? b/direct-buffer b/buffer)
            populate (fn populate [s]
                       (when-not (empty? s)
                         (let [nxt (delay (populate (drop chunk-size s)))
-                              byte-seq (-> chunk-byte-size
-                                         ByteBuffer/allocateDirect
-                                         (b/lazy-byte-seq nxt))]
+                              byte-seq (-> chunk-byte-size allocate (b/lazy-byte-seq nxt))]
                           (loop [idx 0, offset 0, s s]
                             (if (or (p/== chunk-size idx) (empty? s))
                               (b/slice byte-seq 0 offset)
@@ -473,5 +471,6 @@
         (recur (rest s) (p/inc idx))))))
 
 (defn array
+  "Returns a type representing an array of `type` with length `len`."
   [type ^long len]
   (PrimitiveTypeArray. type len 0 (byte-size type)))

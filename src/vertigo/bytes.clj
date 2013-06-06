@@ -34,11 +34,13 @@
   (put-int64 [_ ^long idx ^long val])
   (put-float32 [_ ^long idx ^double val])
   (put-float64 [_ ^long idx ^double val])
+
   (byte-count ^long [_])
   (drop-bytes [_ ^long n])
-
   (slice [_ ^long offset ^long len])
+
   (unwrap-buffers [_])
+
   (byte-order [_])
   (set-byte-order! [_ order])
   (byte-seq-reduce [_ stride read-fn f start]))
@@ -60,7 +62,14 @@
     (-> buf .duplicate (.position offset) ^ByteBuffer (.limit (+ offset len)) .slice (.order order))))
 
 (deftype+ ByteSeq
-  [^ByteBuffer buf]
+  [^ByteBuffer buf
+   close-fn]
+
+  java.io.Closeable
+  (close [_]
+    (when close-fn
+      (close-fn)))
+  
   IByteSeq
   (get-int8 [this idx]     (long (.get buf idx)))
   (get-int16 [this idx]    (long (.getShort buf idx)))
@@ -101,7 +110,7 @@
       (slice this n (- (.remaining buf) n))))
 
   (slice [_ offset len]
-    (ByteSeq. (slice-buffer buf offset len)))) 
+    (ByteSeq. (slice-buffer buf offset len) close-fn))) 
 
 ;;;
 
@@ -130,11 +139,16 @@
    next-chunk
    close-fn]
 
+  java.io.Closeable
+  (close [_]
+    (when close-fn
+      (close-fn)))
+
   clojure.lang.ISeq
   (seq [this]
     this)
   (first [_]
-    (ByteSeq. (slice-buffer buf offset (- limit offset))))
+    (ByteSeq. (slice-buffer buf offset (- limit offset)) close-fn))
   (next [this]
     (let [nxt (when-not (nil? next-chunk) @next-chunk)]
       (when-not (nil? nxt)
@@ -207,12 +221,7 @@
               limit (.limit chunk)]
           (if (<= limit idx')
             (recur (next chunk) (- to-drop (- limit (.offset chunk))))
-            (ChunkedByteSeq. (.buf chunk) idx' limit (.next-chunk chunk) (.close-fn chunk)))))))
-
-  java.io.Closeable
-  (close [_]
-    (when close-fn
-      (close-fn))))
+            (ChunkedByteSeq. (.buf chunk) idx' limit (.next-chunk chunk) (.close-fn chunk))))))))
 
 (defmethod print-method ChunkedByteSeq [o ^java.io.Writer writer]
   (print-method (map identity o) writer))
@@ -222,6 +231,16 @@
 (defn- with-native-order [^ByteBuffer buf]
   (.order buf (ByteOrder/nativeOrder)))
 
+(defn buffer
+  "Creates a byte-buffer."
+  [^long size]
+  (with-native-order (ByteBuffer/allocate size)))
+
+(defn direct-buffer
+  "Creates a direct byte-buffer."
+  [^long size]
+  (with-native-order (ByteBuffer/allocateDirect size)))
+
 (defn lazy-byte-seq
   "Returns a lazily realized byte sequence, based on an initial `buf`, and a promise containing the
    next byte-buffer."
@@ -229,32 +248,38 @@
      (lazy-byte-seq buf next nil))
   ([^ByteBuffer buf next close-fn]
      (ChunkedByteSeq.
-       (with-native-order (or buf (ByteBuffer/allocate 0)))
+       (with-native-order (or buf (buffer 0)))
        0
        (if buf (.remaining buf) 0)
        next
        close-fn)))
 
 (defn byte-seq
-  [^ByteBuffer buf]
-  (ByteSeq. (with-native-order buf)))
+  "Wraps a byte-buffer inside a byte-seq."
+  ([buf]
+     (byte-seq buf nil))
+  ([^ByteBuffer buf close-fn]
+     (ByteSeq. (with-native-order buf) close-fn)))
 
 (defn array->buffer
+  "Converts a byte-array to a byte-buffer."
   ([ary]
      (array->buffer ary 0 (Array/getLength ^bytes ary)))
   ([ary ^long offset ^long length]
      (with-native-order (ByteBuffer/wrap ary offset length))))
 
 (defn array->direct-buffer
+  "Converts a byte-array to a direct buffer."
   ([ary]
      (array->direct-buffer ary 0 (Array/getLength ^bytes ary)))
   ([ary ^long offset ^long length]
-     (let [^ByteBuffer buf (with-native-order (ByteBuffer/allocateDirect length))]
+     (let [^ByteBuffer buf (direct-buffer length)]
        (.put buf ary offset length)
        (.position buf 0)
        buf)))
 
-(defn buffer->byte-array
+(defn buffer->array
+  "Converts a byte-buffer to a byte-array."
   [^ByteBuffer buf]
   (if (.hasArray buf)
     (.array buf)
@@ -263,6 +288,8 @@
       ary)))
 
 (defn input-stream->byte-seq
+  "Converts an input-stream to a chunked byte-seq.  The chunk size must be a multiple of the size of the
+   inner type."
   ([input-stream chunk-size]
      (input-stream->byte-seq input-stream chunk-size false))
   ([^InputStream input-stream ^long chunk-size direct?]
