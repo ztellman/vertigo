@@ -9,8 +9,6 @@
     [java.nio
      ByteBuffer
      ByteOrder]
-    [vertigo.utils
-     Primitives]
     [java.util.concurrent.atomic
      AtomicBoolean]
     [java.lang.reflect

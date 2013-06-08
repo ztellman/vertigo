@@ -34,31 +34,4 @@
     :int16  [-1 0 1 Short/MIN_VALUE    Short/MAX_VALUE]
     :int8   [-1 0 1 Byte/MIN_VALUE     Byte/MAX_VALUE]))
 
-(defn eval-assertions [x]
-  (eval
-    `(do
-       ~@(map #(list `is %) x))))
 
-(deftest test-arithmetic
-  (p/use-primitive-operators)
-  (try
-    (eval-assertions
-      '((== 6 (+ 1 2 3) (+ 3 3))
-        (== 0 (- 6 3 3) (- 6 6))
-        (== 12 (* 2 2 3) (* 4 3))
-        (== 5 (/ 10 2) (/ 20 2 2) (/ 11 2))
-
-        (== 6.0 (+ 1.0 2.0 3.0) (+ 3.0 3.0))
-
-        (thrown? IllegalArgumentException
-          (+ 1 2.0))))
-    (finally
-      (p/unuse-primitive-operators)))
-  
-  (eval-assertions
-    `((== 6 (+ 1 2 3) (+ 3 3))
-      (== 3.0 (+ 1 2.0))))
-
-  )
-
-;;;
