@@ -102,7 +102,7 @@
   (let [ary (long-array 1)]
     (t/batch-bench "array: get"
       (aget ary 0))
-    (t/batch-bench "arrat: put"
+    (t/batch-bench "array: put"
       (aset ary 0 0))
     (t/batch-bench "array: get and put"
       (aset ary 0 (p/inc (long (aget ary 0)))))))

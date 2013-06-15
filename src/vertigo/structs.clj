@@ -78,7 +78,7 @@
                (reify
                  clojure.lang.Named
                  (getName [_#] ~(str name))
-                 (getNamespace [_#] )
+                 (getNamespace [_#] ~(str *ns*))
 
                  IFixedType
                  (byte-size [_#]
@@ -173,7 +173,7 @@
                (reify
                  clojure.lang.Named
                  (getName [_#] ~(str name))
-                 (getNamespace [_#] ~(str *ns*))
+                 (getNamespace [_#] ~(namespace name))
 
                  IFixedCompoundType
                  (has-field? [_# x#]
@@ -223,7 +223,7 @@
 (defmacro def-typed-struct
   "Like `typed-struct`, but defines a var."
   [name & field+types]
-  `(def ~name (typed-struct '~name ~@field+types)))
+  `(def ~(symbol (str *ns*) (str name)) (typed-struct '~name ~@field+types)))
 
 ;;;
 
@@ -323,7 +323,7 @@
 
   clojure.lang.Named
   (getName [_] (str (name type) "[" len "]"))
-  (getNamespace [_] "")
+  (getNamespace [_] )
 
   IFixedCompoundType
   (has-field? [_ idx]
@@ -347,6 +347,10 @@
         (recur (rest s) (p/inc idx))))))
 
 (defn array
-  "Returns a type representing an array of `type` with length `len`."
-  [type ^long len]
-  (FixedTypeArray. type len 0 (byte-size type)))
+  "Returns a type representing an array of `type` with dimensions `dim`."
+  [type & dims]
+  (reduce
+    (fn [type dim]
+      (FixedTypeArray. type (long dim) 0 (byte-size type)))
+    type
+    dims))

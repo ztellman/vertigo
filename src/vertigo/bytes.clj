@@ -33,29 +33,41 @@
   (put-float32 [_ ^long idx ^double val])
   (put-float64 [_ ^long idx ^double val])
 
-  (byte-count ^long [_])
-  (drop-bytes [_ ^long n])
-  (slice [_ ^long offset ^long len])
+  (byte-count ^long [_]
+    "Returns the number of bytes in the byte-seq.")
+  (drop-bytes [_ ^long n]
+    "Returns a new byte-seq without the first `n` bytes.")
+  (slice [_ ^long offset ^long len]
+    "Returns a subset of the byte-seq, starting at `offset` bytes, and `len` bytes long.")
 
-  (unwrap-buffers [_])
+  (unwrap-buffers [_]
+    "Returns a sequence of the underlying bytes.")
 
-  (byte-order [_])
-  (set-byte-order! [_ order])
-  (byte-seq-reduce [_ stride read-fn f start]))
+  (close-fn [_]
+    "Returns the function, if it exists, that closes the underlying source of bytes.")
+  (flush-fn [_]
+    "Returns the function, if it exists, that flushes the underlying source of bytes.")
+  
+  (byte-order [_]
+    "Returns the java.nio.ByteOrder of the underlying buffer.")
+  (set-byte-order! [_ order]
+    "Sets the byte order of the underlying buffer, and returns the byte-seq.")
+  (byte-seq-reduce [_ stride read-fn f start]
+    "A byte-seq specific version of the CollReduce protocol."))
 
-(defn big-endian?
-  {:inline (fn [byte-seq] `(= java.nio.ByteOrder/BIG_ENDIAN (vertigo.bytes/byte-order ~byte-seq)))}
+(definline big-endian?
+  "Returns true if the byte-seq is big-endian."
   [byte-seq]
-  (= ByteOrder/BIG_ENDIAN (byte-order byte-seq)))
+  `(= ByteOrder/BIG_ENDIAN (byte-order ~byte-seq)))
 
-(defn little-endian?
-  {:inline (fn [byte-seq] `(= java.nio.ByteOrder/LITTLE_ENDIAN (vertigo.bytes/byte-order ~byte-seq)))}
+(definline little-endian?
+  "Returns true if the byte-seq is little-endian."
   [byte-seq]
-  (= ByteOrder/LITTLE_ENDIAN (byte-order byte-seq)))
+  `(= ByteOrder/LITTLE_ENDIAN (byte-order ~byte-seq)))
 
 ;;;
 
-(defmacro buf-size [b]
+(definline buf-size [b]
   `(long (.remaining ~(with-meta b {:tag "java.nio.ByteBuffer"}))))
 
 (defn slice-buffer [^ByteBuffer buf ^long offset ^long len]
@@ -69,12 +81,18 @@
 
 (deftype+ ByteSeq
   [^ByteBuffer buf
-   close-fn]
+   close-fn
+   flush-fn]
 
   java.io.Closeable
-  (close [_]
+  (close [this]
     (when close-fn
-      (close-fn)))
+      (close-fn this)))
+
+  (close-fn [_]
+    close-fn)
+  (flush-fn [_]
+    flush-fn)
   
   IByteSeq
   (get-int8 [this idx]     (long (.get buf idx)))
@@ -116,43 +134,46 @@
       (slice this n (- (buf-size buf) n))))
 
   (slice [_ offset len]
-    (ByteSeq. (slice-buffer buf offset len) close-fn))) 
+    (ByteSeq. (slice-buffer buf offset len) close-fn flush-fn))) 
 
 ;;;
 
-(defmacro ^:private next-chunk [chunk]
-  `(let [next# (.next-chunk ~chunk)
-         next# (when-not (nil? next#) @next#)
-         next# (when-not (nil? next#) (set-byte-order! next# (byte-order ~chunk)))]
-     next#))
-
 (defmacro ^:private doto-nth
-  "Finds the appropriate "
-  [this idx f & rest] 
-  `(loop [chunk# ~this, idx# (long ~idx)]
-     (if (nil? chunk#)
-       (throw (IndexOutOfBoundsException. (str ~idx)))
+  [this buf idx f & rest]
+  `(try
+     (loop [chunk# ~this, idx# (long ~idx)]
        (let [^ByteBuffer buf# (.buf chunk#)
              buf-size# (buf-size buf#)]
          (if (< idx# buf-size#)
-           (~f ^ByteBuffer buf# idx# ~@rest)
-           (recur (next-chunk chunk#) (- idx# buf-size#)))))))
+           (~f buf# idx# ~@rest)
+           (let [next# (.next-chunk chunk#)
+                 next# (when-not (nil? next#) @next#)
+                 next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk#)))]
+             (recur next# (- idx# buf-size#))))))
+     (catch NullPointerException e#
+       (throw (IndexOutOfBoundsException. (str ~idx))))))
 
 (deftype+ ChunkedByteSeq
   [^ByteBuffer buf
    next-chunk
-   close-fn]
+   close-fn
+   flush-fn]
 
   java.io.Closeable
   (close [_]
     (when close-fn
       (close-fn)))
 
+  (close-fn [_]
+    close-fn)
+  (flush-fn [_]
+    flush-fn)
+
   clojure.lang.ISeq
   (seq [this]
     this)
   (first [_]
-    (ByteSeq. buf close-fn))
+    (ByteSeq. buf close-fn flush-fn))
   (next [this]
     (let [nxt (when-not (nil? next-chunk) @next-chunk)]
       (when-not (nil? nxt)
@@ -161,23 +182,23 @@
   (more [this]
     (or (next this) '()))
   (cons [this buffer]
-    (ChunkedByteSeq. buf (delay this) close-fn))
+    (ChunkedByteSeq. buf (delay this) close-fn flush-fn))
 
   IByteSeq
   
-  (get-int8 [this idx]     (long (doto-nth this idx .get)))
-  (get-int16 [this idx]    (long (doto-nth this idx .getShort)))
-  (get-int32 [this idx]    (long (doto-nth this idx .getInt)))
-  (get-int64 [this idx]    (doto-nth this idx .getLong))
-  (get-float32 [this idx]  (double (doto-nth this idx .getFloat)))
-  (get-float64 [this idx]  (doto-nth this idx .getDouble))
+  (get-int8 [this idx]     (long (doto-nth this buf idx .get)))
+  (get-int16 [this idx]    (long (doto-nth this buf idx .getShort)))
+  (get-int32 [this idx]    (long (doto-nth this buf idx .getInt)))
+  (get-int64 [this idx]    (doto-nth this buf idx .getLong))
+  (get-float32 [this idx]  (double (doto-nth this buf idx .getFloat)))
+  (get-float64 [this idx]  (doto-nth this buf idx .getDouble))
 
-  (put-int8 [this idx val]     (doto-nth this idx .put val))
-  (put-int16 [this idx val]    (doto-nth this idx .putShort val))
-  (put-int32 [this idx val]    (doto-nth this idx .putInt val))
-  (put-int64 [this idx val]    (doto-nth this idx .putLong val))
-  (put-float32 [this idx val]  (doto-nth this idx .putFloat val))
-  (put-float64 [this idx val]  (doto-nth this idx .putDouble val))
+  (put-int8 [this idx val]     (doto-nth this buf idx .put val))
+  (put-int16 [this idx val]    (doto-nth this buf idx .putShort val))
+  (put-int32 [this idx val]    (doto-nth this buf idx .putInt val))
+  (put-int64 [this idx val]    (doto-nth this buf idx .putLong val))
+  (put-float32 [this idx val]  (doto-nth this buf idx .putFloat val))
+  (put-float64 [this idx val]  (doto-nth this buf idx .putDouble val))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
@@ -213,10 +234,20 @@
         acc
         (recur (next chunk) (+ acc (long (.remaining ^ByteBuffer (.buf chunk))))))))
 
-  (slice [_ offset len]
-    (when (< (buf-size buf) (+ offset len))
-      (throw (IllegalArgumentException. "slice length must be less than or equal to the size of the byte-seq chunk")))
-    (ChunkedByteSeq. (slice-buffer buf offset len) next-chunk close-fn))
+  (slice [this offset len]
+    (when-let [^ChunkedByteSeq byte-seq (drop-bytes this offset)]
+      (let [buf-size (buf-size (.buf byte-seq))]
+        (if (< buf-size (+ offset len))
+          (ChunkedByteSeq.
+            (slice-buffer buf offset (- buf-size offset))
+            (delay (slice @next-chunk 0 (- len buf-size)))
+            close-fn
+            flush-fn)
+          (ChunkedByteSeq.
+            (slice-buffer buf offset len)
+            nil
+            close-fn
+            flush-fn)))))
   
   (drop-bytes [this n]
     (loop [chunk this, to-drop n]
@@ -227,7 +258,8 @@
             (ChunkedByteSeq.
               (slice-buffer (.buf chunk) to-drop (- size to-drop))
               (.next-chunk chunk)
-              (.close-fn chunk))))))))
+              (.close-fn chunk)
+              (.flush-fn chunk))))))))
 
 (defmethod print-method ChunkedByteSeq [o ^java.io.Writer writer]
   (print-method (map identity o) writer))
@@ -251,19 +283,29 @@
   "Returns a lazily realized byte sequence, based on an initial `buf`, and a promise containing the
    next byte-buffer."
   ([^ByteBuffer buf next]
-     (lazy-byte-seq buf next nil))
-  ([^ByteBuffer buf next close-fn]
+     (lazy-byte-seq buf next nil nil))
+  ([^ByteBuffer buf next close-fn flush-fn]
      (ChunkedByteSeq.
        (with-native-order (or buf (buffer 0)))
        next
-       close-fn)))
+       close-fn
+       flush-fn)))
+
+(defn cross-section
+  "Returns a chunked-byte-seq representing a sequence of slices, starting at `offset`, `length`
+   bytes long, and separated by `stride` bytes."
+  [byte-seq ^long offset ^long stride ^long length]
+  (lazy-byte-seq
+    (slice-buffer byte-seq offset length)
+    (-> byte-seq (drop-bytes (+ offset length stride)) (cross-section 0 stride length) delay)
+    (close-fn byte-seq)))
 
 (defn byte-seq
   "Wraps a byte-buffer inside a byte-seq."
   ([buf]
-     (byte-seq buf nil))
-  ([^ByteBuffer buf close-fn]
-     (ByteSeq. (with-native-order buf) close-fn)))
+     (byte-seq buf nil nil))
+  ([^ByteBuffer buf close-fn flush-fn]
+     (ByteSeq. (with-native-order buf) close-fn flush-fn)))
 
 (defn array->buffer
   "Converts a byte-array to a byte-buffer."
@@ -308,10 +350,10 @@
                                   offset (+ offset len)]
                               (cond
                                 (== -1 len)
-                                (lazy-byte-seq (->buffer ary 0 (+ offset 1)) nil close-fn)
+                                (lazy-byte-seq (->buffer ary 0 (+ offset 1)) nil close-fn nil)
 
                                 (== chunk-size len)
-                                (lazy-byte-seq (->buffer ary 0 offset) (delay (read-chunk)) close-fn)
+                                (lazy-byte-seq (->buffer ary 0 offset) (delay (read-chunk)) close-fn nil)
 
                                 :else
                                 (recur offset))))))]
