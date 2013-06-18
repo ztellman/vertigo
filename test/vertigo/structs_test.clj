@@ -138,7 +138,8 @@
     (batch-bench "mutable update nested structure"
       (c/update-in! ms [0 :y 0] p/inc))
     (batch-bench "mutable get nested structure"
-      (c/get-in ms [0 :y 0]))
+      (c/get-in ms [0 :y 0])
+      nil)
     (batch-bench "mutable set nested structure"
       (c/set-in! ms [0 :y 0] 0)))
 

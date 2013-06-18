@@ -39,8 +39,9 @@
       #(get-f buf (* byte-size %))
       (range cnt))))
 
-(defn byte-seq->channel [^ByteSeq byte-seq]
-  (->> (.buf byte-seq)
+(defn byte-seq->channel [byte-seq]
+  (->> (b/unwrap-buffers byte-seq)
+    first
     b/buffer->array
     ByteArrayInputStream.
     Channels/newChannel))

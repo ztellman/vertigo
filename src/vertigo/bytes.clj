@@ -4,6 +4,8 @@
   (:require
     [vertigo.primitives :as prim])
   (:import
+    [sun.misc
+     Unsafe]
     [clojure.lang
      Compiler$LocalBinding]
     [java.nio.channels
@@ -11,6 +13,7 @@
      Channels
      ReadableByteChannel]
     [java.nio
+     DirectByteBuffer
      ByteBuffer
      ByteOrder]
     [java.util.concurrent.atomic
@@ -69,8 +72,6 @@
   [byte-seq]
   `(= ByteOrder/LITTLE_ENDIAN (byte-order ~byte-seq)))
 
-;;;
-
 (definline buf-size [b]
   `(long (.remaining ~(with-meta b {:tag "java.nio.ByteBuffer"}))))
 
@@ -83,8 +84,64 @@
       .slice
       (.order order))))
 
+;;;
+
 (deftype+ ByteSeq
   [^ByteBuffer buf
+   close-fn
+   flush-fn]
+
+  IByteSeq
+  (get-int8 [this idx]     (long (.get buf idx)))
+  (get-int16 [this idx]    (long (.getShort buf idx)))
+  (get-int32 [this idx]    (long (.getInt buf idx)))
+  (get-int64 [this idx]    (.getLong buf idx))
+  (get-float32 [this idx]  (double (.getFloat buf idx)))
+  (get-float64 [this idx]  (.getDouble buf idx))
+
+  (put-int8 [this idx val]     (.put buf idx (byte val)))
+  (put-int16 [this idx val]    (.putShort buf idx (short val)))
+  (put-int32 [this idx val]    (.putInt buf idx (int val)))
+  (put-int64 [this idx val]    (.putLong buf idx val))
+  (put-float32 [this idx val]  (.putFloat buf idx (float val)))
+  (put-float64 [this idx val]  (.putDouble buf idx val))
+
+  (byte-order [_] (.order buf))
+  (set-byte-order! [this order] (.order buf order) this)
+
+  (close-fn [_] close-fn)
+  (flush-fn [_] flush-fn)
+
+  (byte-seq-reduce [this stride read-fn f start]
+    (let [stride (long stride)
+          size (buf-size buf)]
+      (loop [idx 0, val start]
+        (if (<= size idx)
+          val
+          (let [val' (f val (read-fn this idx))]
+            (if (reduced? val')
+              @val'
+              (recur (+ idx stride) val')))))))
+
+  (unwrap-buffers [_]
+    [buf])
+
+  (byte-count [_]
+    (buf-size buf))
+
+  (drop-bytes [this n]
+    (when (< n (buf-size buf))
+      (slice this n (- (buf-size buf) n))))
+
+  (slice [_ offset len]
+    (ByteSeq. (slice-buffer buf offset len) close-fn flush-fn)))
+
+;;;
+
+(deftype+ UnsafeByteSeq
+  [^Unsafe unsafe
+   ^ByteBuffer buf
+   ^long loc
    close-fn
    flush-fn]
 
@@ -99,19 +156,19 @@
     flush-fn)
   
   IByteSeq
-  (get-int8 [this idx]     (long (.get buf idx)))
-  (get-int16 [this idx]    (long (.getShort buf idx)))
-  (get-int32 [this idx]    (long (.getInt buf idx)))
-  (get-int64 [this idx]    (.getLong buf idx))
-  (get-float32 [this idx]  (double (.getFloat buf idx)))
-  (get-float64 [this idx]  (.getDouble buf idx))
+  (get-int8 [this idx]     (long (.getByte unsafe (+ loc idx))))
+  (get-int16 [this idx]    (long (.getShort unsafe (+ loc idx))))
+  (get-int32 [this idx]    (long (.getInt unsafe (+ loc idx))))
+  (get-int64 [this idx]    (.getLong unsafe (+ loc idx)))
+  (get-float32 [this idx]  (double (.getFloat unsafe (+ loc idx))))
+  (get-float64 [this idx]  (.getDouble unsafe (+ loc idx)))
 
-  (put-int8 [this idx val]     (.put buf idx val))
-  (put-int16 [this idx val]    (.putShort buf idx val))
-  (put-int32 [this idx val]    (.putInt buf idx val))
-  (put-int64 [this idx val]    (.putLong buf idx val))
-  (put-float32 [this idx val]  (.putFloat buf idx val))
-  (put-float64 [this idx val]  (.putDouble buf idx val))
+  (put-int8 [this idx val]     (.putByte unsafe (+ loc idx) (byte val)))
+  (put-int16 [this idx val]    (.putShort unsafe (+ loc idx) (short val)))
+  (put-int32 [this idx val]    (.putInt unsafe (+ loc idx) (int val)))
+  (put-int64 [this idx val]    (.putLong unsafe (+ loc idx) val))
+  (put-float32 [this idx val]  (.putFloat unsafe (+ loc idx) (float val)))
+  (put-float64 [this idx val]  (.putDouble unsafe (+ loc idx) val))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
@@ -138,7 +195,7 @@
       (slice this n (- (buf-size buf) n))))
 
   (slice [_ offset len]
-    (ByteSeq. (slice-buffer buf offset len) close-fn flush-fn))) 
+    (ByteSeq. (slice-buffer buf offset len) close-fn flush-fn)))
 
 ;;;
 
@@ -198,11 +255,11 @@
   (get-float32 [this idx]  (double (doto-nth this buf chunk-size idx .getFloat)))
   (get-float64 [this idx]  (doto-nth this buf chunk-size idx .getDouble))
 
-  (put-int8 [this idx val]     (doto-nth this buf chunk-size idx .put val))
-  (put-int16 [this idx val]    (doto-nth this buf chunk-size idx .putShort val))
-  (put-int32 [this idx val]    (doto-nth this buf chunk-size idx .putInt val))
+  (put-int8 [this idx val]     (doto-nth this buf chunk-size idx .put (byte val)))
+  (put-int16 [this idx val]    (doto-nth this buf chunk-size idx .putShort (short val)))
+  (put-int32 [this idx val]    (doto-nth this buf chunk-size idx .putInt (int val)))
   (put-int64 [this idx val]    (doto-nth this buf chunk-size idx .putLong val))
-  (put-float32 [this idx val]  (doto-nth this buf chunk-size idx .putFloat val))
+  (put-float32 [this idx val]  (doto-nth this buf chunk-size idx .putFloat (float val)))
   (put-float64 [this idx val]  (doto-nth this buf chunk-size idx .putDouble val))
 
   (byte-order [_] (.order buf))
@@ -275,6 +332,15 @@
 
 ;;;
 
+(def ^:private use-unsafe?
+  (System/getProperty "vertigo.unsafe"))
+
+(def ^Unsafe unsafe
+  (when use-unsafe?
+    (let [f (.getDeclaredField Unsafe "theUnsafe")]
+      (.setAccessible f true)
+      (.get f nil))))
+
 (defn- with-native-order [^ByteBuffer buf]
   (.order buf (ByteOrder/nativeOrder)))
 
@@ -315,7 +381,9 @@
   ([buf]
      (byte-seq buf nil nil))
   ([^ByteBuffer buf close-fn flush-fn]
-     (ByteSeq. (with-native-order buf) close-fn flush-fn)))
+     (if (and (.isDirect buf) use-unsafe?)
+       (UnsafeByteSeq. unsafe (with-native-order buf) (.address ^DirectByteBuffer buf) close-fn flush-fn)
+       (ByteSeq. (with-native-order buf) close-fn flush-fn))))
 
 (defn array->buffer
   "Converts a byte-array to a byte-buffer."
