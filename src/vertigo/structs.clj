@@ -268,7 +268,7 @@
   (count [_]
     (p/div (b/byte-count byte-seq) stride))
   (nth [_ idx]
-    (read-value type byte-seq (p/+ offset (p/* stride idx))))
+    (read-value type byte-seq (p/+ offset (p/* stride (long idx)))))
   (nth [this idx default-value]
     (try
       (nth this idx)

@@ -4,8 +4,12 @@
   (:require
     [vertigo.primitives :as prim])
   (:import
-    [java.io
-     InputStream]
+    [clojure.lang
+     Compiler$LocalBinding]
+    [java.nio.channels
+     Channel
+     Channels
+     ReadableByteChannel]
     [java.nio
      ByteBuffer
      ByteOrder]
@@ -139,13 +143,13 @@
 ;;;
 
 (defmacro ^:private doto-nth
-  [this buf idx f & rest]
+  [this buf size idx f & rest]
   `(try
      (loop [chunk# ~this, idx# (long ~idx)]
-       (let [^ByteBuffer buf# (.buf chunk#)
-             buf-size# (buf-size buf#)]
+       (let [buf-size# (.chunk-size chunk#)]
          (if (< idx# buf-size#)
-           (~f buf# idx# ~@rest)
+           (let [^ByteBuffer buf# (.buf chunk#)]
+             (~f buf# idx# ~@rest))
            (let [next# (.next-chunk chunk#)
                  next# (when-not (nil? next#) @next#)
                  next# (when-not (nil? next#) (set-byte-order! next# (byte-order chunk#)))]
@@ -153,8 +157,9 @@
      (catch NullPointerException e#
        (throw (IndexOutOfBoundsException. (str ~idx))))))
 
-(deftype+ ChunkedByteSeq
+(deftype ChunkedByteSeq
   [^ByteBuffer buf
+   ^long chunk-size
    next-chunk
    close-fn
    flush-fn]
@@ -182,23 +187,23 @@
   (more [this]
     (or (next this) '()))
   (cons [this buffer]
-    (ChunkedByteSeq. buf (delay this) close-fn flush-fn))
+    (ChunkedByteSeq. buffer (buf-size buffer) (delay this) close-fn flush-fn))
 
   IByteSeq
   
-  (get-int8 [this idx]     (long (doto-nth this buf idx .get)))
-  (get-int16 [this idx]    (long (doto-nth this buf idx .getShort)))
-  (get-int32 [this idx]    (long (doto-nth this buf idx .getInt)))
-  (get-int64 [this idx]    (doto-nth this buf idx .getLong))
-  (get-float32 [this idx]  (double (doto-nth this buf idx .getFloat)))
-  (get-float64 [this idx]  (doto-nth this buf idx .getDouble))
+  (get-int8 [this idx]     (long (doto-nth this buf chunk-size idx .get)))
+  (get-int16 [this idx]    (long (doto-nth this buf chunk-size idx .getShort)))
+  (get-int32 [this idx]    (long (doto-nth this buf chunk-size idx .getInt)))
+  (get-int64 [this idx]    (doto-nth this buf chunk-size idx .getLong))
+  (get-float32 [this idx]  (double (doto-nth this buf chunk-size idx .getFloat)))
+  (get-float64 [this idx]  (doto-nth this buf chunk-size idx .getDouble))
 
-  (put-int8 [this idx val]     (doto-nth this buf idx .put val))
-  (put-int16 [this idx val]    (doto-nth this buf idx .putShort val))
-  (put-int32 [this idx val]    (doto-nth this buf idx .putInt val))
-  (put-int64 [this idx val]    (doto-nth this buf idx .putLong val))
-  (put-float32 [this idx val]  (doto-nth this buf idx .putFloat val))
-  (put-float64 [this idx val]  (doto-nth this buf idx .putDouble val))
+  (put-int8 [this idx val]     (doto-nth this buf chunk-size idx .put val))
+  (put-int16 [this idx val]    (doto-nth this buf chunk-size idx .putShort val))
+  (put-int32 [this idx val]    (doto-nth this buf chunk-size idx .putInt val))
+  (put-int64 [this idx val]    (doto-nth this buf chunk-size idx .putLong val))
+  (put-float32 [this idx val]  (doto-nth this buf chunk-size idx .putFloat val))
+  (put-float64 [this idx val]  (doto-nth this buf chunk-size idx .putDouble val))
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
@@ -236,15 +241,17 @@
 
   (slice [this offset len]
     (when-let [^ChunkedByteSeq byte-seq (drop-bytes this offset)]
-      (let [buf-size (buf-size (.buf byte-seq))]
-        (if (< buf-size (+ offset len))
+      (let [size (buf-size (.buf byte-seq))]
+        (if (< size (+ offset len))
           (ChunkedByteSeq.
-            (slice-buffer buf offset (- buf-size offset))
-            (delay (slice @next-chunk 0 (- len buf-size)))
+            (slice-buffer buf offset (- size offset))
+            (- size offset)
+            (delay (slice @next-chunk 0 (- len size)))
             close-fn
             flush-fn)
           (ChunkedByteSeq.
             (slice-buffer buf offset len)
+            len
             nil
             close-fn
             flush-fn)))))
@@ -252,11 +259,13 @@
   (drop-bytes [this n]
     (loop [chunk this, to-drop n]
       (when-not (nil? chunk)
-        (let [size (buf-size (.buf chunk))]
+        (let [buf (.buf chunk)
+              size (buf-size buf)]
           (if (<= size to-drop)
             (recur (next chunk) (- to-drop size))
             (ChunkedByteSeq.
-              (slice-buffer (.buf chunk) to-drop (- size to-drop))
+              (slice-buffer buf to-drop (- size to-drop))
+              (- size to-drop)
               (.next-chunk chunk)
               (.close-fn chunk)
               (.flush-fn chunk))))))))
@@ -287,6 +296,7 @@
   ([^ByteBuffer buf next close-fn flush-fn]
      (ChunkedByteSeq.
        (with-native-order (or buf (buffer 0)))
+       (buf-size buf)
        next
        close-fn
        flush-fn)))
@@ -324,6 +334,21 @@
        (.position buf 0)
        buf)))
 
+(defn channel->buffers
+  "Transforms an NIO channel to a sequence of buffers."
+  [^ReadableByteChannel channel ^long chunk-size direct?]
+  (let [allocate (if direct? direct-buffer buffer)]
+    (when (.isOpen channel)
+      (cons
+        (let [^ByteBuffer buf (allocate chunk-size)]
+          (while
+            (and
+              (.isOpen channel)
+              (pos? (.read channel buf))))
+          (.flip buf))
+        (lazy-seq
+          (channel->buffers channel chunk-size direct?))))))
+
 (defn buffer->array
   "Converts a byte-buffer to a byte-array."
   [^ByteBuffer buf]
@@ -333,28 +358,15 @@
       (doto buf .mark (.get ary) .reset)
       ary)))
 
-(defn input-stream->byte-seq
-  "Converts an input-stream to a chunked byte-seq.  The chunk size must be a multiple of the size of the
-   inner type."
-  ([input-stream chunk-size]
-     (input-stream->byte-seq input-stream chunk-size false))
-  ([^InputStream input-stream ^long chunk-size direct?]
-     (let [close-fn #(.close input-stream)
-           read-chunk (fn read-chunk []
-                        (let [ary (Array/newInstance Byte/TYPE chunk-size)
-                              ->buffer (if direct?
-                                         array->direct-buffer
-                                         array->buffer)]
-                          (loop [offset 0]
-                            (let [len (.read input-stream ary offset (- chunk-size offset))
-                                  offset (+ offset len)]
-                              (cond
-                                (== -1 len)
-                                (lazy-byte-seq (->buffer ary 0 (+ offset 1)) nil close-fn nil)
+(defn buffers->byte-seq
+  "Converts a lazy sequence of byte-buffers into a chunked byte-seq."
+  ([bufs]
+     (buffers->byte-seq bufs nil nil))
+  ([bufs close-fn flush-fn]
+     (lazy-byte-seq
+       (first bufs)
+       (delay (buffers->byte-seq (rest bufs) close-fn flush-fn))
+       close-fn
+       flush-fn)))
 
-                                (== chunk-size len)
-                                (lazy-byte-seq (->buffer ary 0 offset) (delay (read-chunk)) close-fn nil)
 
-                                :else
-                                (recur offset))))))]
-       (read-chunk))))

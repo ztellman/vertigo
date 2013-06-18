@@ -13,6 +13,8 @@
     [java.nio
      ByteBuffer
      ByteOrder]
+    [java.nio.channels
+     Channels]
     [vertigo.bytes
      ByteSeq]))
 
@@ -37,11 +39,14 @@
       #(get-f buf (* byte-size %))
       (range cnt))))
 
-(defn byte-seq->input-stream [^ByteSeq byte-seq]
-  (ByteArrayInputStream. (b/buffer->array (.buf byte-seq))))
+(defn byte-seq->channel [^ByteSeq byte-seq]
+  (->> (.buf byte-seq)
+    b/buffer->array
+    ByteArrayInputStream.
+    Channels/newChannel))
 
 (defn ->chunked [byte-seq chunk-size]
-  (-> byte-seq byte-seq->input-stream (b/input-stream->byte-seq chunk-size)))
+  (-> byte-seq byte-seq->channel (b/channel->buffers chunk-size false) b/buffers->byte-seq))
 
 (deftest test-roundtrip
   (doseq [t (keys types)]

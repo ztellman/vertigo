@@ -12,16 +12,22 @@
      ByteBuffer
      MappedByteBuffer]
     [java.nio.channels
+     Channels
      FileChannel
      FileChannel$MapMode]))
+
+(defn- safe-chunk-size [type ^long chunk-size]
+  (p/* (s/byte-size type) (p/div chunk-size (s/byte-size type))))
 
 (defn wrap-input-stream
   ([type input-stream]
      (wrap-input-stream type input-stream false 4096))
   ([type ^InputStream input-stream direct? chunk-size]
-     (let [safe-chunk-size (p/* (s/byte-size type) (p/div (long chunk-size) (s/byte-size type)))]
-       (s/wrap-byte-seq type
-         (b/input-stream->byte-seq input-stream direct? safe-chunk-size)))))
+     (let [byte-seq (-> input-stream
+                      Channels/newChannel
+                      (b/channel->buffers (safe-chunk-size type chunk-size) direct?)
+                      b/buffers->byte-seq)]
+       (s/wrap-byte-seq type byte-seq))))
 
 (defn wrap-buffer
   ([type ^ByteBuffer buf]
@@ -33,7 +39,7 @@
 
 (defn wrap-file
   ([type filename]
-     (->> filename io/reader io/input-stream (wrap-input-stream type))))
+     (->> filename (RandomAccessFile. "r") (wrap-input-stream type))))
 
 (defn wrap-mapped-file
   ([type ^String filename]

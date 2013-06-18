@@ -195,7 +195,7 @@
 
 
 
-#_(defmacro reduce-over
+#_(defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.
 
    `reduce-over` takes two binding forms, one for sequences that mirrors `doseq`, and a second for accumulators
@@ -220,9 +220,9 @@
    We can also iterate over particular fields or arrays within a sequence:
 
      (reduce-over [x (over s [_ :a :b])] [sum 0] 
-       (+ ?x sum)
+       (+ x sum)
 
-   This gives us the sum of (get-in [x :a :b]) for each x within the sequence.  The * symbol denotes the free variable
+   This gives us the sum of (get-in [i :a :b]) for each index within the sequence.  The * symbol denotes the free variable
    that is being iterated over.  If there is an inner array, we can also iterate over that instead:
 
 
