@@ -2,6 +2,7 @@
   (:use
     potemkin)
   (:require
+    [byte-streams :as bytes]
     [vertigo.primitives :as prim])
   (:import
     [sun.misc
@@ -16,6 +17,8 @@
      DirectByteBuffer
      ByteBuffer
      ByteOrder]
+    [java.io
+     Closeable]
     [java.util.concurrent.atomic
      AtomicBoolean]
     [java.lang.reflect
@@ -47,9 +50,6 @@
   (slice [_ ^long offset ^long len]
     "Returns a subset of the byte-seq, starting at `offset` bytes, and `len` bytes long.")
 
-  (unwrap-buffers [_]
-    "Returns a sequence of the underlying bytes.")
-
   (close-fn [_]
     "Returns the function, if it exists, that closes the underlying source of bytes.")
   (flush-fn [_]
@@ -76,13 +76,14 @@
   `(long (.remaining ~(with-meta b {:tag "java.nio.ByteBuffer"}))))
 
 (defn slice-buffer [^ByteBuffer buf ^long offset ^long len]
-  (let [order (.order buf)]
-    (-> buf
-      .duplicate
-      (.position offset)
-      ^ByteBuffer (.limit (+ offset len))
-      .slice
-      (.order order))))
+  (when buf
+    (let [order (.order buf)]
+      (-> buf
+        .duplicate
+        (.position offset)
+        ^ByteBuffer (.limit (+ offset len))
+        .slice
+        (.order order)))))
 
 ;;;
 
@@ -122,9 +123,6 @@
             (if (reduced? val')
               @val'
               (recur (+ idx stride) val')))))))
-
-  (unwrap-buffers [_]
-    [buf])
 
   (byte-count [_]
     (buf-size buf))
@@ -183,9 +181,6 @@
             (if (reduced? val')
               @val'
               (recur (+ idx stride) val')))))))
-
-  (unwrap-buffers [_]
-    [buf])
 
   (byte-count [_]
     (buf-size buf))
@@ -264,13 +259,6 @@
 
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
-
-  (unwrap-buffers [this]
-    (cons
-      buf
-      (lazy-seq
-        (when-let [nxt (next this)]
-          (unwrap-buffers nxt)))))
 
   (byte-seq-reduce [this stride read-fn f start]
     (let [stride (long stride)]
@@ -354,27 +342,16 @@
   [^long size]
   (with-native-order (ByteBuffer/allocateDirect size)))
 
-(defn lazy-byte-seq
-  "Returns a lazily realized byte sequence, based on an initial `buf`, and a promise containing the
-   next byte-buffer."
-  ([^ByteBuffer buf next]
-     (lazy-byte-seq buf next nil nil))
-  ([^ByteBuffer buf next close-fn flush-fn]
+(defn chunked-byte-seq
+  ([buf next]
+     (chunked-byte-seq buf next nil nil))
+  ([buf next close-fn flush-fn]
      (ChunkedByteSeq.
        (with-native-order (or buf (buffer 0)))
        (buf-size buf)
        next
        close-fn
        flush-fn)))
-
-(defn cross-section
-  "Returns a chunked-byte-seq representing a sequence of slices, starting at `offset`, `length`
-   bytes long, and separated by `stride` bytes."
-  [byte-seq ^long offset ^long stride ^long length]
-  (lazy-byte-seq
-    (slice-buffer byte-seq offset length)
-    (-> byte-seq (drop-bytes (+ offset length stride)) (cross-section 0 stride length) delay)
-    (close-fn byte-seq)))
 
 (defn byte-seq
   "Wraps a byte-buffer inside a byte-seq."
@@ -385,56 +362,65 @@
        (UnsafeByteSeq. unsafe (with-native-order buf) (.address ^DirectByteBuffer buf) close-fn flush-fn)
        (ByteSeq. (with-native-order buf) close-fn flush-fn))))
 
-(defn array->buffer
-  "Converts a byte-array to a byte-buffer."
-  ([ary]
-     (array->buffer ary 0 (Array/getLength ^bytes ary)))
-  ([ary ^long offset ^long length]
-     (with-native-order (ByteBuffer/wrap ary offset length))))
+(defn cross-section
+  "Returns a chunked-byte-seq representing a sequence of slices, starting at `offset`, `length`
+   bytes long, and separated by `stride` bytes."
+  [byte-seq ^long offset ^long length ^long stride]
+  (when-let [buf (and byte-seq
+                   (-> byte-seq
+                     bytes/to-byte-buffers
+                     first
+                     (slice-buffer offset length)))]
+    (chunked-byte-seq
+      buf
+      (-> byte-seq
+        (drop-bytes (+ offset length stride))
+        (cross-section 0 length stride)
+        delay)
+      (close-fn byte-seq)
+      (flush-fn byte-seq))))
 
-(defn array->direct-buffer
-  "Converts a byte-array to a direct buffer."
-  ([ary]
-     (array->direct-buffer ary 0 (Array/getLength ^bytes ary)))
-  ([ary ^long offset ^long length]
-     (let [^ByteBuffer buf (direct-buffer length)]
-       (.put buf ary offset length)
-       (.position buf 0)
-       buf)))
+(defn to-byte-seq
+  "Converts `x` to a byte-seq."
+  ([x]
+     (to-byte-seq x nil))
+  ([x options]
+     (bytes/convert x ByteSeq options)))
 
-(defn channel->buffers
-  "Transforms an NIO channel to a sequence of buffers."
-  [^ReadableByteChannel channel ^long chunk-size direct?]
-  (let [allocate (if direct? direct-buffer buffer)]
-    (when (.isOpen channel)
-      (cons
-        (let [^ByteBuffer buf (allocate chunk-size)]
-          (while
-            (and
-              (.isOpen channel)
-              (pos? (.read channel buf))))
-          (.flip buf))
-        (lazy-seq
-          (channel->buffers channel chunk-size direct?))))))
+(defn to-chunked-byte-seq
+  "Converts `x` to a chunked-byte-seq."
+  ([x]
+     (to-chunked-byte-seq x nil))
+  ([x options]
+     (bytes/convert x ChunkedByteSeq options)))
 
-(defn buffer->array
-  "Converts a byte-buffer to a byte-array."
-  [^ByteBuffer buf]
-  (if (.hasArray buf)
-    (.array buf)
-    (let [^bytes ary (Array/newInstance Byte/TYPE (.remaining buf))]
-      (doto buf .mark (.get ary) .reset)
-      ary)))
+;;;
 
-(defn buffers->byte-seq
-  "Converts a lazy sequence of byte-buffers into a chunked byte-seq."
-  ([bufs]
-     (buffers->byte-seq bufs nil nil))
-  ([bufs close-fn flush-fn]
-     (lazy-byte-seq
-       (first bufs)
-       (delay (buffers->byte-seq (rest bufs) close-fn flush-fn))
-       close-fn
-       flush-fn)))
+(bytes/def-conversion [ByteSeq (bytes/seq-of ByteBuffer)]
+  [byte-seq]
+  [(.buf byte-seq)])
 
+(bytes/def-conversion [UnsafeByteSeq (bytes/seq-of ByteBuffer)]
+  [byte-seq]
+  [(.buf byte-seq)])
 
+(bytes/def-conversion [ChunkedByteSeq (bytes/seq-of ByteBuffer)]
+  [byte-seq]
+  (lazy-seq
+    (.buf byte-seq)
+    (when-let [s (seq (next byte-seq))]
+      (bytes/to-byte-buffers s))))
+
+(bytes/def-conversion [(bytes/seq-of ByteBuffer) ChunkedByteSeq]
+  [bufs]
+  (let [buf (first bufs)]
+    (chunked-byte-seq
+      (first bufs)
+      (delay (bytes/convert (rest bufs) ChunkedByteSeq))
+      (when (instance? Closeable bufs)
+        #(.close ^Closeable bufs))
+      nil)))
+
+(bytes/def-conversion [ByteBuffer ByteSeq]
+  [buf]
+  (byte-seq buf))

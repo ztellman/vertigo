@@ -44,7 +44,7 @@
               (range 10))]
       (is (= s (io/marshal-seq typ s)))
       (is (= s (io/lazily-marshal-seq typ s)))
-      (is (= s (io/lazily-marshal-seq typ 32 false s))))))
+      (is (= s (io/lazily-marshal-seq typ s {:chunk-size 32}))))))
 
 (s/def-typed-struct tuple
   :x s/int32
@@ -85,6 +85,14 @@
     (is (= 1 (get-in ms [0 :x]) (c/get-in ms [0 :x])))
     (c/set-in! ms [0 :x] 10)
     (is (= 10 (get-in ms [0 :x]) (c/get-in ms [0 :x])))))
+
+(def int-matrix (s/array s/int64 10 10))
+
+(def ^:int-matrix int-matrices
+  (io/marshal-seq int-matrix
+    (->> (range 1000)
+      (partition 10)
+      (partition 10))))
 
 ;;;
 

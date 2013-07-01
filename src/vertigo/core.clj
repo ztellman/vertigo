@@ -47,7 +47,9 @@
     (when (= @v type)
       v)))
 
-(defn- validate-lookup [type field]
+(defn- validate-lookup
+  "Makes sure that the given field actually exists within the given type."
+  [type field]
   ;; can't go any deeper
   (when-not (instance? IFixedCompoundType type)
     (throw (IllegalArgumentException. (str "Invalid field '" field "' for non-compound type " (name type)))))
@@ -61,6 +63,8 @@
     (throw (IllegalArgumentException. (str "Invalid field '" field "' for type " (name type))))))
 
 (defn- lookup-info
+  "Walks the field sequence, returning a descriptor of offsets, lengths, and other useful
+   information."
   [type fields]
   (let [descriptor (reduce
                      (fn [{:keys [types type-form-fn offset-exprs lengths]} field]
@@ -73,9 +77,10 @@
                                           (constantly v)
                                           (fn [x] `(s/field-type ~(type-form-fn x) ~field)))
                           :offset-exprs (conj offset-exprs
-                                          (if (symbol? field)
-                                            `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
-                                            (s/field-offset type field)))
+                                          (conj (last offset-exprs)
+                                            (if (symbol? field)
+                                              `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
+                                              (s/field-offset type field))))
                           :lengths (conj lengths
                                      (when (and has-fields? (s/has-field? type 0))
                                        (p/div (s/byte-size type) (s/byte-size (s/field-type type 0)))))}))
@@ -85,32 +90,39 @@
     (-> descriptor
       (update-in [:types] rest)
       (update-in [:offset-exprs]
-        #(concat
-           (->> % (remove number?))
-           (->> % (filter number?) (apply +) list (remove zero?))))
+        (fn [exprs]
+          (map
+            #(concat
+               (->> % (remove number?))
+               (->> % (filter number?) (apply +) list (remove zero?)))
+            exprs)))
       (assoc
         :inner-type inner-type
         :inlined? (instance? IFixedInlinedType inner-type)))))
 
-;;;
+;;; 
 
 (defn- field-operation
   [env x fields inlined-form non-inlined-form]
   (let [type-sym (element-type env x)
         type (resolve-type type-sym)
         x (with-meta x {})
-        {:keys [inner-type inlined? type-form-fn offset-exprs]} (lookup-info type (rest fields))]
+        {:keys [inner-type inlined? type-form-fn offset-exprs]} (lookup-info type (rest fields))
+        offset-exprs (last offset-exprs)
+        x-sym (if (symbol? x) x (gensym "x"))
+        form ((if inlined?
+                inlined-form
+                non-inlined-form)
+              (if inlined?
+                inner-type
+                (type-form-fn type-sym))
+              x-sym
+              `(s/unwrap-byte-seq ~x-sym)
+              `(p/+ (s/index-offset ~x-sym ~(first fields)) ~@offset-exprs))]
     (unify-gensyms
-      `(let [x## ~x]
-         ~((if inlined?
-             inlined-form
-             non-inlined-form)
-           (if inlined?
-             inner-type
-             (type-form-fn type-sym))
-           `x##
-           `(s/unwrap-byte-seq x##)
-           `(p/+ (s/index-offset x## ~(first fields)) ~@offset-exprs))))))
+      (if (= x x-sym)
+        form
+        `(let [~x-sym ~x] ~form)))))
 
 (defmacro get-in
   "Like `get-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
@@ -156,6 +168,8 @@
             val'# (~f val# ~@args)]
         (s/write-value element-type# byte-seq# offset# val'#)
         nil))))
+
+
 
 ;;;
 

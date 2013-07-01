@@ -39,15 +39,8 @@
       #(get-f buf (* byte-size %))
       (range cnt))))
 
-(defn byte-seq->channel [byte-seq]
-  (->> (b/unwrap-buffers byte-seq)
-    first
-    b/buffer->array
-    ByteArrayInputStream.
-    Channels/newChannel))
-
 (defn ->chunked [byte-seq chunk-size]
-  (-> byte-seq byte-seq->channel (b/channel->buffers chunk-size false) b/buffers->byte-seq))
+  (b/to-chunked-byte-seq byte-seq {:chunk-size chunk-size}))
 
 (deftest test-roundtrip
   (doseq [t (keys types)]

@@ -33,9 +33,9 @@
 (definterface+ IByteSeqWrapper
   (index-offset ^long [_ ^long idx]
     "Returns the byte offset of the given index within the byte-seq-wrapper.")
-  (element-type [_]
+  (element-type ^IFixedType [_]
     "Returns the type of the elements within the seq.")
-  (unwrap-byte-seq [_]
+  (unwrap-byte-seq ^IByteSeq [_]
     "Returns the byte-seq within the wrapper."))
 
 ;;;
