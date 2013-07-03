@@ -2,6 +2,7 @@
   (:use
     potemkin)
   (:require
+    [byte-streams :as bytes]
     [clojure.core.protocols :as proto]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p]))
@@ -31,12 +32,12 @@
     "Returns an eval'able form for writing the struct to a byte-seq."))
 
 (definterface+ IByteSeqWrapper
+  (unwrap-byte-seq [_]
+    "Returns the inner byte-seq.")
   (index-offset ^long [_ ^long idx]
     "Returns the byte offset of the given index within the byte-seq-wrapper.")
   (element-type ^IFixedType [_]
-    "Returns the type of the elements within the seq.")
-  (unwrap-byte-seq ^IByteSeq [_]
-    "Returns the byte-seq within the wrapper."))
+    "Returns the type of the elements within the seq."))
 
 ;;;
 
@@ -245,7 +246,8 @@
 
   java.io.Closeable
   (close [_]
-    (.close ^java.io.Closeable byte-seq))
+    (when-let [close-fn (b/close-fn byte-seq)]
+      (close-fn byte-seq)))
   
   IByteSeqWrapper
   (unwrap-byte-seq [_] byte-seq)
@@ -313,6 +315,16 @@
   ([type stride offset byte-seq]
      (ByteSeqWrapper. stride offset type byte-seq)))
 
+(bytes/def-conversion [ByteSeqWrapper (bytes/seq-of java.nio.ByteBuffer)]
+  [wrapper]
+  (let [byte-seq (.byte-seq wrapper)
+        byte-size (byte-size (element-type wrapper))
+        subset? (p/not== byte-size (.stride wrapper))]
+    (bytes/to-byte-buffers
+      (if subset?
+        (b/cross-section byte-seq (.offset wrapper) byte-size (.stride wrapper))
+        byte-seq))))
+
 ;;;
 
 (deftype FixedTypeArray
@@ -322,7 +334,14 @@
    ^long stride]
 
   clojure.lang.Named
-  (getName [_] (str (name type) "[" len "]"))
+  (getName [_]
+    (let [sub-types (->> type
+                         (iterate #(when (instance? FixedTypeArray %) (.type ^FixedTypeArray %)))
+                         (take-while (complement nil?))
+                         seq)]
+      (apply str
+        (name (last sub-types)) "[" len "]"
+        (map #(str "[" (.len ^FixedTypeArray %) "]") (butlast sub-types)))))
   (getNamespace [_] )
 
   IFixedCompoundType
@@ -347,10 +366,10 @@
         (recur (rest s) (p/inc idx))))))
 
 (defn array
-  "Returns a type representing an array of `type` with dimensions `dim`."
+  "Returns a type representing an array of `type` with dimensions `dims`."
   [type & dims]
   (reduce
     (fn [type dim]
       (FixedTypeArray. type (long dim) 0 (byte-size type)))
     type
-    dims))
+    (reverse dims)))

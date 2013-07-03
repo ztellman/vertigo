@@ -110,6 +110,11 @@
   (byte-order [_] (.order buf))
   (set-byte-order! [this order] (.order buf order) this)
 
+  java.io.Closeable
+  (close [this]
+    (when close-fn
+      (close-fn this)))
+
   (close-fn [_] close-fn)
   (flush-fn [_] flush-fn)
 
@@ -217,9 +222,9 @@
    flush-fn]
 
   java.io.Closeable
-  (close [_]
+  (close [this]
     (when close-fn
-      (close-fn)))
+      (close-fn this)))
 
   (close-fn [_]
     close-fn)
@@ -374,7 +379,7 @@
     (chunked-byte-seq
       buf
       (-> byte-seq
-        (drop-bytes (+ offset length stride))
+        (drop-bytes (+ offset stride))
         (cross-section 0 length stride)
         delay)
       (close-fn byte-seq)
@@ -397,19 +402,27 @@
 ;;;
 
 (bytes/def-conversion [ByteSeq (bytes/seq-of ByteBuffer)]
-  [byte-seq]
-  [(.buf byte-seq)])
+  [byte-seq options]
+  (if-let [chunk-size (:chunk-size options)]
+    (bytes/to-byte-buffers (.buf byte-seq) options)
+    [(.buf byte-seq)]))
 
 (bytes/def-conversion [UnsafeByteSeq (bytes/seq-of ByteBuffer)]
-  [byte-seq]
-  [(.buf byte-seq)])
+  [byte-seq options]
+  (if-let [chunk-size (:chunk-size options)]
+    (bytes/to-byte-buffers (.buf byte-seq) options)
+    [(.buf byte-seq)]))
 
 (bytes/def-conversion [ChunkedByteSeq (bytes/seq-of ByteBuffer)]
-  [byte-seq]
-  (lazy-seq
-    (.buf byte-seq)
-    (when-let [s (seq (next byte-seq))]
-      (bytes/to-byte-buffers s))))
+  [byte-seq options]
+  (let [bufs (lazy-seq
+               (cons
+                 (.buf byte-seq)
+                 (when-let [s (seq (next byte-seq))]
+                   (bytes/to-byte-buffers s))))]
+    (if-let [chunk-size (:chunk-size options)]
+      (-> bufs bytes/to-readable-channel (bytes/to-byte-buffers options))
+      bufs)))
 
 (bytes/def-conversion [(bytes/seq-of ByteBuffer) ChunkedByteSeq]
   [bufs]

@@ -5,6 +5,8 @@
     potemkin
     [potemkin.walk :only (prewalk)])
   (:require
+    [byte-streams :as bytes]
+    [vertigo.io :as io]
     [vertigo.structs :as s]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p])
@@ -47,6 +49,13 @@
     (when (= @v type)
       v)))
 
+(defn- free-variable? [x]
+  (when (symbol? x)
+    (let [s (name x)]
+      (boolean
+        (or (= "_" s)
+          (re-find #"^\?.*" s))))))
+
 (defn- validate-lookup
   "Makes sure that the given field actually exists within the given type."
   [type field]
@@ -66,39 +75,70 @@
   "Walks the field sequence, returning a descriptor of offsets, lengths, and other useful
    information."
   [type fields]
-  (let [descriptor (reduce
-                     (fn [{:keys [types type-form-fn offset-exprs lengths]} field]
-                       (let [type (last types)
-                             _  (validate-lookup type field)
-                             inner-type (s/field-type type field)
-                             has-fields? (instance? IFixedCompoundType type)]
-                         {:types (conj types inner-type)
-                          :type-form-fn (if-let [v (resolve-type-var inner-type)]
-                                          (constantly v)
-                                          (fn [x] `(s/field-type ~(type-form-fn x) ~field)))
-                          :offset-exprs (conj offset-exprs
-                                          (conj (last offset-exprs)
-                                            (if (symbol? field)
-                                              `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
-                                              (s/field-offset type field))))
-                          :lengths (conj lengths
-                                     (when (and has-fields? (s/has-field? type 0))
-                                       (p/div (s/byte-size type) (s/byte-size (s/field-type type 0)))))}))
-                     {:types [type], :type-form-fn identity, :offset-exprs [], :lengths []}
-                     fields)
-        inner-type (or (last (:types descriptor)) type)]
-    (-> descriptor
-      (update-in [:types] rest)
-      (update-in [:offset-exprs]
-        (fn [exprs]
-          (map
-            #(concat
-               (->> % (remove number?))
-               (->> % (filter number?) (apply +) list (remove zero?)))
-            exprs)))
-      (assoc
-        :inner-type inner-type
-        :inlined? (instance? IFixedInlinedType inner-type)))))
+  (let [{:keys [types type-form-fn offsets lengths]}
+        (reduce
+          (fn [{:keys [types type-form-fn offsets lengths]} field]
+            (let [type (last types)
+                  _  (validate-lookup type field)
+                  inner-type (s/field-type type field)
+                  has-fields? (instance? IFixedCompoundType type)]
+              {:types (conj types inner-type)
+               :type-form-fn (if-let [v (resolve-type-var inner-type)]
+                               (constantly v)
+                               (fn [x] `(s/field-type ~(type-form-fn x) ~field)))
+               :offsets (conj offsets
+                          (if (symbol? field)
+                            `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
+                            (s/field-offset type field)))
+               :lengths (conj lengths
+                          (when (and has-fields? (s/has-field? type 0))
+                            (p/div (s/byte-size type) (s/byte-size (s/field-type type 0)))))}))
+          {:types [type], :type-form-fn identity, :offsets [],  :lengths []}
+          fields)
+        
+        inner-type (or (last types) type)
+
+        ;; take a bunch of numbers and forms, and collapse all the numbers together
+        collapse-exprs #(concat
+                          (->> % (remove number?))
+                          (->> % (filter number?) (apply +) list (remove zero?)))
+
+        num-prefixed-lookups (->> fields
+                               (take-while (complement free-variable?))
+                               count)
+
+        ;; the outermost boundaries of the lookup
+        slice (when-not (zero? num-prefixed-lookups)
+                {:offset (collapse-exprs (take num-prefixed-lookups offsets))
+                 :length (s/byte-size (nth types num-prefixed-lookups))})
+
+        contiguous-groups (fn contiguous-groups [pred s]
+                            (let [s (drop-while (complement pred) s)]
+                              (when-not (empty? s)
+                                (cons (take-while pred s)
+                                  (contiguous-groups pred (drop-while pred s))))))
+
+        cross-sections (->> (map #(zipmap [:field :offset :length :stride] %&)
+                                    fields
+                                    offsets
+                                    (map s/byte-size (rest types))
+                                    (map s/byte-size types))
+                         (drop num-prefixed-lookups)
+                         (contiguous-groups #(not (free-variable? (:field %))))
+                         (map (fn [field-descriptors]
+                                {:offset-exprs (collapse-exprs (map :offset field-descriptors))
+                                 :length (apply min (map :length field-descriptors))
+                                 :stride (apply max (map :stride field-descriptors))})))]
+    
+    {:types (rest types)
+     :cross-sections cross-sections
+     :slice slice
+     :type-form-fn type-form-fn
+     :lengths lengths
+     :inner-type inner-type
+     :outer-type (nth types num-prefixed-lookups)
+     :inlined? (instance? IFixedInlinedType inner-type)
+     :offset-exprs (collapse-exprs offsets)}))
 
 ;;; 
 
@@ -108,7 +148,6 @@
         type (resolve-type type-sym)
         x (with-meta x {})
         {:keys [inner-type inlined? type-form-fn offset-exprs]} (lookup-info type (rest fields))
-        offset-exprs (last offset-exprs)
         x-sym (if (symbol? x) x (gensym "x"))
         form ((if inlined?
                 inlined-form
@@ -169,7 +208,45 @@
         (s/write-value element-type# byte-seq# offset# val'#)
         nil))))
 
+(defn- over- [s lookup]
+  (let [element-type (s/element-type s)
+        type (s/array element-type (count s))
+        {:keys [slice cross-sections inner-type]} (lookup-info type lookup)
+        byte-seq (-> s bytes/to-byte-buffers b/to-byte-seq)
+        byte-seq (if-let [{:keys [offset length]} slice]
+                   (b/slice byte-seq (apply + offset) length)
+                   byte-seq)]
+    (->> cross-sections
+      (reduce
+        (fn [byte-seq {:keys [offset-exprs length stride]}]
+          (b/cross-section byte-seq (apply + offset-exprs) length stride))
+        byte-seq)
+      (s/wrap-byte-seq inner-type))))
 
+(defmacro over
+  "Allows you to select a flattened subset of a sequence.  The `fields` are nested lookups,
+   as you would use in `get-in`, but where a field describes an index in an array, the may be
+   either '_' or a symbol prefixed with '?' to select all indices in that position.
+
+   Take a 2x2 matrix of integers counting up from 0 to 3:
+
+     ((0 1) (2 3))
+
+   We get a flattened view of all integers within the matrix by marking both indices as free:
+
+     (over s [_ _]) => (0 1 2 3)
+
+   However, we can also iterate over only the elements in the first array:
+
+     (over s [0 _]) => (0 1)
+
+   Or only the first elements of all arrays:
+
+     (over s [_ 0]) => (0 2)
+
+   This syntax can be used in `doreduce` blocks to specify what subset to iterate over."
+  [s fields]
+  `(#'vertigo.core/over- ~s ~(vec (map #(if (free-variable? %) `'~% %) fields))))
 
 ;;;
 
@@ -206,8 +283,6 @@
   (let [header (take-while (complement seq?) x)
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
-
-
 
 #_(defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.
