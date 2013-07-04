@@ -49,6 +49,10 @@
     (when (= @v type)
       v)))
 
+(defn- with-element-type [sym seq env]
+  (let [v (element-type env seq)]
+    (with-meta sym {(keyword (symbol (namespace v) (name v))) true})))
+
 (defn- free-variable? [x]
   (when (symbol? x)
     (let [s (name x)]
@@ -284,7 +288,44 @@
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
 
-#_(defmacro doreduce
+(defn- iteration-form [seq-bindings value-bindings env body]
+  (let [elements (->> seq-bindings (partition 2) (map first))
+        seqs (->> seq-bindings (partition 2) (map second))
+        accumulators (->> value-bindings (partition 2) (map first))
+        initial-values (->> value-bindings (partition 2) (map second))
+        over? (every? #(and (seq? %) (= 'over (first %))) seqs)
+        seq-syms (repeatedly #(gensym "seq"))]
+    (if-not over?
+
+      ;; normal linear iteration
+      (unify-gensyms
+        `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
+               cnt# (long (count ~(first seq-syms)))]
+           (loop [idx## 0, ~@(interleave accumulators initial-values)]
+             (if (< idx## cnt#)
+               (let [~@(interleave elements (map (fn [s] `(get-in ~s [idx##])) seq-syms))]
+                 ~(walk-return-exprs
+                    (fn [x]
+                      (cond
+                          
+                        (= 1 (count accumulators))
+                        `(recur (p/inc idx##) ~x)
+
+                        (not= (count accumulators) (count x))
+                        (throw
+                          (IllegalArgumentException.
+                            (str "expected " (count accumulators) " return values, got " (count x))))
+                          
+                        :else
+                        `(recur (p/inc idx##) ~@x)))
+                    `(do ~@body)))
+               ~(if (= 1 (count accumulators))
+                  (first accumulators)
+                  `(vector ~@accumulators)))))))))
+
+(def ^:s/int32 s (io/marshal-seq s/int32 (range 10)))
+
+(defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.
 
    `reduce-over` takes two binding forms, one for sequences that mirrors `doseq`, and a second for accumulators
@@ -309,59 +350,6 @@
    We can also iterate over particular fields or arrays within a sequence:
 
      (reduce-over [x (over s [_ :a :b])] [sum 0] 
-       (+ x sum)
-
-   This gives us the sum of (get-in [i :a :b]) for each index within the sequence.  The * symbol denotes the free variable
-   that is being iterated over.  If there is an inner array, we can also iterate over that instead:
-
-
-   This will give us the sum of (get-in [0 :z x]) for each x within the inner array."
+       (+ x sum)"
   [seq-bindings value-bindings & body]
-  (let [element-syms (->> seq-bindings (partition 2) (map first))
-        seqs (->> seq-bindings (partition 2) (map second))
-        value-syms (->> value-bindings (partition 2) (map first))
-        types (map element-type seqs) 
-        resolved-types (map resolve-type types)]
-    (cond
-      ;; multi-index iteration
-      (every? vector? element-syms)
-      (unify-gensyms
-        )
-      
-     (unify-gensyms
-       `(let [len# ~(let [lookup (first seq-lookups)]
-                      (if (= '* (first lookup))
-                        `(count ~(first seqs))
-                        (inner-type-length
-                          (first resolved-types)
-                          (->> lookup rest (take-while #(not= '* %))))))]
-          (loop [~'&idx 0 ~@value-bindings]
-            (if (p/== ~'&idx len#)
-              ~(if (= 1 (count value-syms))
-                 (first value-syms)
-                 `(vector ~@value-syms))
-              (let [~@(interleave
-                        element-syms
-                        (map
-                          (fn [type x lookup]
-                            `(vertigo.core/get-in
-                               ~(with-meta x {(keyword type) true})
-                               ~(vec (map #(if (= '* %) '&idx %) lookup))))
-                          types
-                          seqs
-                          seq-lookups))]
-                ~(walk-return-exprs
-                   (fn [x]
-                     (cond
-                      
-                       (= 1 (count value-syms))
-                       `(recur (p/inc ~'&idx) ~x)
-                      
-                       (not (= (count x) (count value-syms)))
-                       (throw
-                         (IllegalArgumentException.
-                           (str "expected " (count value-syms) " return values, got " (count x))))
-                      
-                       :else
-                       `(recur (p/inc ~'&idx) ~@x)))
-                   `(do ~@body))))))))))
+  (iteration-form seq-bindings value-bindings &env body))

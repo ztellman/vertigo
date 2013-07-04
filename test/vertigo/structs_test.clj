@@ -88,28 +88,6 @@
 
 ;;;
 
-(def int-matrix (s/array s/int64 10 10))
-
-(def ^:int-matrix int-matrices
-  (io/marshal-seq int-matrix
-    (->> (range 1000)
-      (partition 10)
-      (partition 10))))
-
-(deftest test-over
-  (are [expected fields]
-    (= expected (c/over int-matrices fields))
-    
-    (range 0 10)     [0 0 _]
-    (range 0 1000)   [_ _ _]
-    (range 990 1000) [9 9 _]
-    (range 600 700)  [6 _ _]
-
-    (mapcat #(range (+ (* % 100) 90) (* (inc %) 100)) (range 10))  [_ 9 _]
-    (map #(+ 100 (* % 10) 1) (range 10)) [1 _ 1]))
-
-;;;
-
 (deftest ^:benchmark benchmark-reduce
   (let [s (take 1e6 (range 1e6))]
     (bench "reduce unchunked seq"
