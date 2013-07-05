@@ -288,45 +288,51 @@
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
 
+;; todo: refactor this into to something not monstrous and terrifying
 (defn- iteration-form [seq-bindings value-bindings env body]
-  (let [elements (->> seq-bindings (partition 2) (map first))
-        seqs (->> seq-bindings (partition 2) (map second))
+  (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
+        seq-bindings (take-while (complement keyword?) seq-bindings)
+        elements (->> seq-bindings (partition 2) (map first))
+        seqs (->> seq-bindings (take-while (complement keyword?)) (partition 2) (map second))
         accumulators (->> value-bindings (partition 2) (map first))
         initial-values (->> value-bindings (partition 2) (map second))
-        over? (every? #(and (seq? %) (= 'over (first %))) seqs)
+        over? (every? #(and (seq? %) (or (= 'over (first %)) (= #'vertigo.core/over (resolve (first %))))) seqs)
         seq-syms (repeatedly #(gensym "seq"))]
     (if-not over?
 
       ;; normal linear iteration
-      (unify-gensyms
-        `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
-               cnt# (long (count ~(first seq-syms)))]
-           (loop [idx## 0, ~@(interleave accumulators initial-values)]
-             (if (< idx## cnt#)
-               (let [~@(interleave elements (map (fn [s] `(get-in ~s [idx##])) seq-syms))]
-                 ~(walk-return-exprs
-                    (fn [x]
-                      (cond
-
-                        (and (seq? x) (= 'break (first x)))
-                        (if (= 2 (count x))
-                          (second x)
-                          `(vector ~@(rest x)))
+      (let [step (long (get seq-options :step 1))]
+        (unify-gensyms
+          `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
+                 limit# (long ~(if-let [limit (seq-options :limit)]
+                                 limit
+                                 `(.count ~(with-meta (first seq-syms) {:tag "clojure.lang.Counted"}))))]
+             (loop [idx## 0, ~@(interleave accumulators initial-values)]
+               (if (< idx## limit#)
+                 (let [~@(interleave elements (map (fn [s] `(get-in ~s [idx##])) seq-syms))]
+                   ~(walk-return-exprs
+                      (fn [x]
+                        (cond
                           
-                        (= 1 (count accumulators))
-                        `(recur (p/inc idx##) ~x)
-
-                        (not= (count accumulators) (count x))
-                        (throw
-                          (IllegalArgumentException.
-                            (str "expected " (count accumulators) " return values, got " (count x))))
+                          (and (seq? x) (= 'break (first x)))
+                          (if (= 2 (count x))
+                            (second x)
+                            `(vector ~@(rest x)))
                           
-                        :else
-                        `(recur (p/inc idx##) ~@x)))
-                    `(do ~@body)))
-               ~(if (= 1 (count accumulators))
-                  (first accumulators)
-                  `(vector ~@accumulators))))))
+                          (= 1 (count accumulators))
+                          `(recur (p/+ idx## ~step) ~x)
+                          
+                          (not= (count accumulators) (count x))
+                          (throw
+                            (IllegalArgumentException.
+                              (str "expected " (count accumulators) " return values, got " (count x))))
+                          
+                          :else
+                          `(recur (p/+ idx## ~step) ~@x)))
+                      `(do ~@body)))
+                 ~(if (= 1 (count accumulators))
+                    (first accumulators)
+                    `(vector ~@accumulators)))))))
 
       ;; multi-dimensional iteration
       (let [fields (map last seqs)
@@ -334,7 +340,7 @@
             iterators (->> fields
                         first
                         (filter free-variable?)
-                        (map #(if (= '_ %) (gensym "?itr") %)))
+                        (map #(if (= '_ %) (gensym "?itr__") %)))
             fields (map
                      #(first
                         (reduce
@@ -350,67 +356,87 @@
                                   (->> seqs first (element-type env) resolve-type)
                                   Integer/MAX_VALUE)
                                 (first fields))
-            lengths (cons `cnt## (rest lengths))
-            iterator+lengths (filter
-                               #(free-variable? (first %))
-                               (map list (first fields) lengths))]
+            iterator->step (if-let [step (seq-options :step)]
+                             (if (= 1 (count iterators))
+                               {(first iterators) step}
+                               (throw (IllegalArgumentException.
+                                        ":step is ambiguous when there are multiple free variables.")))
+                             (merge
+                               (zipmap iterators (repeat 1))
+                               (seq-options :steps)))
+            iterator->limit (if-let [limit (seq-options :limit)]
+                              (if (= 1 (count iterators))
+                                {(first iterators) limit}
+                                (throw (IllegalArgumentException.
+                                         ":limit is ambiguous when there are multiple free variables.")))
+                              (-> (zipmap (rest (first fields)) (rest lengths))
+                                (assoc (ffirst fields) `cnt##)
+                                (merge (seq-options :limits))
+                                (select-keys iterators)))
+            iterator->limit-sym (zipmap
+                                  (->> iterator->limit keys (remove #(number? (iterator->limit %))))
+                                  (repeatedly #(gensym "lim__")))
+            iterator->limit-val (merge iterator->limit iterator->limit-sym)
 
-        (let [body `(let [~@(interleave
-                              elements
-                              (map (fn [s fields] `(get-in ~s [~@fields])) seq-syms fields))]
-                      ~(walk-return-exprs
-                         (fn [x]
-                           (cond
+            body `(let [~@(interleave
+                            elements
+                            (map (fn [s fields] `(get-in ~s [~@fields])) seq-syms fields))]
+                    ~(walk-return-exprs
+                       (fn [x]
+                         (cond
                              
-                             (and (seq? x) (= 'break (first x)))
-                             (if (= 2 (count x))
-                               (second x)
-                               `(vector ~@(rest x)))
+                           (and (seq? x) (= 'break (first x)))
+                           (if (= 2 (count x))
+                             (second x)
+                             `(vector ~@(rest x)))
                              
-                             (= 1 (count accumulators))
-                             `(recur ~@iterators ~x)
+                           (= 1 (count accumulators))
+                           `(recur ~@iterators ~x)
                              
-                             (not= (count accumulators) (count x))
-                             (throw
-                               (IllegalArgumentException.
-                                 (str "expected " (count accumulators) " return values, got " (count x))))
+                           (not= (count accumulators) (count x))
+                           (throw
+                             (IllegalArgumentException.
+                               (str "expected " (count accumulators) " return values, got " (count x))))
                              
-                             :else
-                             `(recur ~@iterators ~@x)))
-                         `(do ~@body)))
-              root-iterator (last iterators)]
-          (unify-gensyms
-            `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
-                   cnt## (long (count ~(first seqs)))]
-               (loop [~@(interleave (butlast iterators) (repeat 0))
-                      ~root-iterator -1
-                      ~@(interleave
-                          accumulators
-                          initial-values)]
-                 (let [~root-iterator (p/inc ~root-iterator)
-                       ~@(apply concat
-                           (map
-                             (fn [[i length] [j _]]
-                               `(~j (if (>= ~i ~length)
-                                      (p/inc ~j)
-                                      ~j)))
-                             (reverse iterator+lengths)
-                             (rest (reverse iterator+lengths))))
-                       ~@(apply concat
-                           (map
-                             (fn [[i length]]
-                               `(~i (if (>= ~i ~length)
-                                      0
-                                      ~i)))
-                             (rest iterator+lengths)))]
-                   (if (< ~@(first iterator+lengths))
-                     ~body
-                     ~(if (= 1 (count accumulators))
-                        (first accumulators)
-                        `(vector ~@accumulators))))))))))))
+                           :else
+                           `(recur ~@iterators ~@x)))
+                       `(do ~@body)))
 
-(def ary (s/array s/int32 10))
-(def ^:ary s (io/marshal-seq ary (repeat 10 (range 10))))
+            root-iterator (last iterators)]
+
+        (unify-gensyms
+          `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
+                 cnt## (long (.count ~(with-meta (first seqs) {:tag "clojure.lang.Counted"})))
+                 ~@(apply concat
+                     (map
+                       (fn [[i sym]]
+                         `(~sym ~(iterator->limit i)))
+                       iterator->limit-sym))]
+             (loop [~@(interleave (butlast iterators) (repeat 0))
+                    ~root-iterator ~(- (iterator->step root-iterator))
+                    ~@(interleave
+                        accumulators
+                        initial-values)]
+               (let [~root-iterator (p/+ ~root-iterator ~(iterator->step root-iterator))
+                     ~@(apply concat
+                         (map
+                           (fn [[i j]]
+                             `(~j (if (>= ~i ~(iterator->limit-val i))
+                                    (p/+ ~j ~(iterator->step j))
+                                    ~j)))
+                           (partition 2 1 (reverse iterators))))
+                     ~@(apply concat
+                         (map
+                           (fn [i]
+                             `(~i (if (>= ~i ~(iterator->limit-val i))
+                                    0
+                                    ~i)))
+                           (rest iterators)))]
+                 (if (< ~(first iterators) ~(iterator->limit-val (first iterators)))
+                   ~body
+                   ~(if (= 1 (count accumulators))
+                      (first accumulators)
+                      `(vector ~@accumulators)))))))))))
 
 (defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.

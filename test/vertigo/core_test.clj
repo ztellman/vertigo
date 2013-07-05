@@ -17,7 +17,7 @@
       (partition 10)
       (partition 10))))
 
-(def array-dim 1e6)
+(def array-dim 1e3)
 
 (def ^:s/int64 int64-array
   (io/marshal-seq s/int64 (range array-dim)))
@@ -46,8 +46,45 @@
     [1 _ 1]))
 
 (deftest test-doreduce
-  (is (= (reduce + (range 1e3))
+
+  ;; 1d
+  (is (= (reduce + (range array-dim))
         (c/doreduce [x int64-array] [sum 0]
+          (+ x sum))))
+  (is (= (* 2 (reduce + (range array-dim)))
+        (c/doreduce [x int64-array, y int64-array] [sum 0]
+          (+ x y sum))))
+  (is (= (->> (range array-dim) (partition 2) (map first) (reduce +))
+        (c/doreduce [x int64-array :step 2] [sum 0]
+          (+ x sum))))
+  (is (= (->> (range array-dim) (take 600) (partition 4) (map first) (reduce +))
+        (c/doreduce [x int64-array :step 4 :limit 600] [sum 0]
+          (+ x sum))))
+  (is (= [(reduce + (range 10)) (reduce * (range 1 11))]
+        (c/doreduce [x int64-array :limit 10] [sum 0, product 1]
+          [(+ x sum) (* (inc x) product)])))
+
+  ;; n-d
+  (is (= (reduce + (range array-dim))
+        (c/doreduce [x (c/over int64-array [_])] [sum 0]
+          (+ x sum))))
+  (is (= (->> (range array-dim) (partition 2) (map first) (reduce +))
+        (c/doreduce [x (over int64-array [_]) :step 2] [sum 0]
+          (+ x sum))))
+  (is (= (->> (range array-dim) (take 100) (reduce +))
+        (c/doreduce [x (over int64-array [_]) :limit 100] [sum 0]
+          (+ x sum))))
+  (is (= (reduce + (range 1e3))
+        (c/doreduce [x (over int64-matrices [_ _ _])] [sum 0]
+          (+ x sum))))
+  (is (= [(reduce + (range 10)) (reduce * (range 1 11))]
+        (c/doreduce [x (over int64-matrices [0 0 _])] [sum 0, product 1]
+          [(+ x sum) (* (inc x) product)])))
+  (is (= (reduce + (range 200))
+        (c/doreduce [x (over int64-matrices [?x _ _]) :limits {?x 2}] [sum 0]
+          (+ x sum))))
+  (is (= (->> (range 200) (partition 2) (map first) (reduce +))
+        (c/doreduce [x (over int64-matrices [?x _ ?z]) :limits {?x 2} :steps {?z 2}] [sum 0]
           (+ x sum)))))
 
 ;;;
