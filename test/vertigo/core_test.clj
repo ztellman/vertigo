@@ -51,6 +51,11 @@
   (is (= (reduce + (range array-dim))
         (c/doreduce [x int64-array] [sum 0]
           (+ x sum))))
+  (is (= (reduce + (range 10))
+        (c/doreduce [x int64-array] [sum 0]
+          (if (= 10 x)
+            (break sum)
+            (+ x sum)))))
   (is (= (* 2 (reduce + (range array-dim)))
         (c/doreduce [x int64-array, y int64-array] [sum 0]
           (+ x y sum))))
@@ -68,6 +73,11 @@
   (is (= (reduce + (range array-dim))
         (c/doreduce [x (c/over int64-array [_])] [sum 0]
           (+ x sum))))
+  (is (= (reduce + (range 10))
+        (c/doreduce [x (c/over int64-array [_])] [sum 0]
+          (if (= 10 x)
+            (break sum)
+            (+ x sum)))))
   (is (= (->> (range array-dim) (partition 2) (map first) (reduce +))
         (c/doreduce [x (over int64-array [_]) :step 2] [sum 0]
           (+ x sum))))
