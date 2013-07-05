@@ -17,14 +17,16 @@
       (partition 10)
       (partition 10))))
 
+(def array-dim 1e6)
+
 (def ^:s/int64 int64-array
-  (io/marshal-seq s/int64 (range 1e3)))
+  (io/marshal-seq s/int64 (range array-dim)))
 
 (def ^:s/int32 int32-array
-  (io/marshal-seq s/int32 (range 1e3)))
+  (io/marshal-seq s/int32 (range array-dim)))
 
 (def ^:s/int16 int16-array
-  (io/marshal-seq s/int16 (range 1e3)))
+  (io/marshal-seq s/int16 (range array-dim)))
 
 (deftest test-over
   (are [expected fields]
@@ -50,14 +52,32 @@
 
 ;;;
 
+(deftest ^:benchmark benchmark-reduce-matrix-sum
+  (let [^:s/int64 s (c/over int64-matrices [0 0 _])]
+    (bench "pre-over 1d sum"
+      (c/doreduce [x s] [sum 0]
+        (p/+ sum x))))
+  (bench "simple 1d sum"
+    (c/doreduce [x (over int64-array [_])] [sum 0]
+      (p/+ sum x)))
+  (bench "1d sum"
+    (c/doreduce [x (over int64-matrices [0 0 _])] [sum 0]
+      (p/+ sum x)))
+  (bench "2d sum"
+    (c/doreduce [x (over int64-matrices [0 _ _])] [sum 0]
+      (p/+ sum x)))
+  (bench "3d sum"
+    (c/doreduce [x (over int64-matrices [_ _ _])] [sum 0]
+      (p/+ sum x))))
+
 (deftest ^:benchmark benchmark-reduce-sum
-  (let [num-array (long-array (range 1e3))]
+  (let [num-array (long-array (range array-dim))]
     (bench "array sum"
       (reduce + num-array)))
-  (let [s (range 1e3)]
+  (let [s (range array-dim)]
     (bench "seq sum"
       (reduce + s)))
-  (let [s (take 1e3 (iterate inc 0))]
+  (let [s (take array-dim (iterate inc 0))]
     (bench "lazy-seq sum"
       (reduce + s)))
   (bench "doreduce sum int64"

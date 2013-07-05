@@ -307,6 +307,11 @@
                  ~(walk-return-exprs
                     (fn [x]
                       (cond
+
+                        (and (seq? x) (= 'break (first x)))
+                        (if (= 2 (count x))
+                          (second x)
+                          `(vector ~@(rest x)))
                           
                         (= 1 (count accumulators))
                         `(recur (p/inc idx##) ~x)
@@ -321,9 +326,91 @@
                     `(do ~@body)))
                ~(if (= 1 (count accumulators))
                   (first accumulators)
-                  `(vector ~@accumulators)))))))))
+                  `(vector ~@accumulators))))))
 
-(def ^:s/int32 s (io/marshal-seq s/int32 (range 10)))
+      ;; multi-dimensional iteration
+      (let [fields (map last seqs)
+            seqs (map second seqs)
+            iterators (->> fields
+                        first
+                        (filter free-variable?)
+                        (map #(if (= '_ %) (gensym "?itr") %)))
+            fields (map
+                     #(first
+                        (reduce
+                          (fn [[fields iterators] field]
+                            (if (free-variable? field)
+                              [(conj fields (first iterators)) (rest iterators)]
+                              [(conj fields field) iterators]))
+                          [[] iterators]
+                          %))
+                     fields)
+            {:keys [lengths]} (lookup-info
+                                (s/array
+                                  (->> seqs first (element-type env) resolve-type)
+                                  Integer/MAX_VALUE)
+                                (first fields))
+            lengths (cons `cnt## (rest lengths))
+            iterator+lengths (filter
+                               #(free-variable? (first %))
+                               (map list (first fields) lengths))]
+
+        (let [body `(let [~@(interleave
+                              elements
+                              (map (fn [s fields] `(get-in ~s [~@fields])) seq-syms fields))]
+                      ~(walk-return-exprs
+                         (fn [x]
+                           (cond
+                             
+                             (and (seq? x) (= 'break (first x)))
+                             (if (= 2 (count x))
+                               (second x)
+                               `(vector ~@(rest x)))
+                             
+                             (= 1 (count accumulators))
+                             `(recur ~@iterators ~x)
+                             
+                             (not= (count accumulators) (count x))
+                             (throw
+                               (IllegalArgumentException.
+                                 (str "expected " (count accumulators) " return values, got " (count x))))
+                             
+                             :else
+                             `(recur ~@iterators ~@x)))
+                         `(do ~@body)))
+              root-iterator (last iterators)]
+          (unify-gensyms
+            `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
+                   cnt## (long (count ~(first seqs)))]
+               (loop [~@(interleave (butlast iterators) (repeat 0))
+                      ~root-iterator -1
+                      ~@(interleave
+                          accumulators
+                          initial-values)]
+                 (let [~root-iterator (p/inc ~root-iterator)
+                       ~@(apply concat
+                           (map
+                             (fn [[i length] [j _]]
+                               `(~j (if (>= ~i ~length)
+                                      (p/inc ~j)
+                                      ~j)))
+                             (reverse iterator+lengths)
+                             (rest (reverse iterator+lengths))))
+                       ~@(apply concat
+                           (map
+                             (fn [[i length]]
+                               `(~i (if (>= ~i ~length)
+                                      0
+                                      ~i)))
+                             (rest iterator+lengths)))]
+                   (if (< ~@(first iterator+lengths))
+                     ~body
+                     ~(if (= 1 (count accumulators))
+                        (first accumulators)
+                        `(vector ~@accumulators))))))))))))
+
+(def ary (s/array s/int32 10))
+(def ^:ary s (io/marshal-seq ary (repeat 10 (range 10))))
 
 (defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.
