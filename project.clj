@@ -6,10 +6,12 @@
                  [primitive-math "0.1.2"]
                  [byte-streams "0.1.1-SNAPSHOT"]]
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
-                                  [org.clojure/clojure "1.5.1"]]}}
+                                  [org.clojure/clojure "1.5.1"]]}
+             :benchmark {:jvm-opts ["-Dvertigo.unsafe"]}}
   :warn-on-reflection true
   :test-selectors {:default #(not (some #{:benchmark}
                                         (cons (:tag %) (keys %))))
                    :benchmark :benchmark
                    :all (constantly true)}
+  :aliases {"benchmark" ["with-profile" "dev,benchmark" "test" ":benchmark"]}
   :jvm-opts ^:replace ["-server"])

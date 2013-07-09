@@ -79,12 +79,13 @@
             #(hash-map :x %1 :y %2)
             (range 1)
             (repeat 1 (range 10)))
-        ^:tuple ms (io/marshal-seq tuple s)]
+        ^:tuple ms (io/marshal-seq tuple s)
+        n 0]
 
     (c/update-in! ms [0 :x] p/inc)
-    (is (= 1 (get-in ms [0 :x]) (c/get-in ms [0 :x])))
+    (is (= 1 (get-in ms [0 :x]) (c/get-in ms [0 :x]) (c/get-in ms [n :x])))
     (c/set-in! ms [0 :x] 10)
-    (is (= 10 (get-in ms [0 :x]) (c/get-in ms [0 :x])))))
+    (is (= 10 (get-in ms [0 :x]) (c/get-in ms [0 :x]) (c/get-in ms [n :x])))))
 
 ;;;
 

@@ -325,10 +325,11 @@
 
 ;;;
 
-(def ^:private use-unsafe?
-  (System/getProperty "vertigo.unsafe"))
+(def ^{:doc "If true, disables all runtime index bounds checking."}
+  use-unsafe?
+  (boolean (System/getProperty "vertigo.unsafe")))
 
-(def ^Unsafe unsafe
+(def ^Unsafe ^:private unsafe
   (when use-unsafe?
     (let [f (.getDeclaredField Unsafe "theUnsafe")]
       (.setAccessible f true)

@@ -119,8 +119,10 @@
 
 (deftest ^:benchmark benchmark-reduce-sum
   (let [num-array (long-array (range array-dim))]
-    (bench "array sum"
-      (reduce + num-array)))
+    (bench "array reducer sum"
+      (reduce + num-array))
+    (bench "areduce sum"
+      (areduce num-array i sum 0 (p/+ sum (aget num-array i)))))
   (let [s (range array-dim)]
     (bench "seq sum"
       (reduce + s)))

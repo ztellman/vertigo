@@ -1,6 +1,6 @@
 (ns vertigo.core
   (:refer-clojure
-    :exclude [get-in])
+    :exclude [get-in every?])
   (:use
     potemkin
     [potemkin.walk :only (prewalk)])
@@ -79,13 +79,15 @@
   "Walks the field sequence, returning a descriptor of offsets, lengths, and other useful
    information."
   [type fields]
-  (let [{:keys [types type-form-fn offsets lengths]}
+  (let [{:keys [types type-form-fn offsets lengths validations]}
         (reduce
-          (fn [{:keys [types type-form-fn offsets lengths]} field]
+          (fn [{:keys [types type-form-fn offsets lengths validations]} field]
             (let [type (last types)
                   _  (validate-lookup type field)
                   inner-type (s/field-type type field)
-                  has-fields? (instance? IFixedCompoundType type)]
+                  has-fields? (instance? IFixedCompoundType type)
+                  length (when (and has-fields? (s/has-field? type 0))
+                           (p/div (s/byte-size type) (s/byte-size (s/field-type type 0))))]
               {:types (conj types inner-type)
                :type-form-fn (if-let [v (resolve-type-var inner-type)]
                                (constantly v)
@@ -94,10 +96,11 @@
                           (if (symbol? field)
                             `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
                             (s/field-offset type field)))
-               :lengths (conj lengths
-                          (when (and has-fields? (s/has-field? type 0))
-                            (p/div (s/byte-size type) (s/byte-size (s/field-type type 0)))))}))
-          {:types [type], :type-form-fn identity, :offsets [],  :lengths []}
+               :lengths (conj lengths length)
+               :validations (conj validations
+                              `(when (< (long ~field) ~length)
+                                 (IndexOutOfBoundsException. (str ~(str field) ": " ~field))))}))
+          {:types [type], :type-form-fn identity, :offsets [],  :lengths [], :validations []}
           fields)
         
         inner-type (or (last types) type)
@@ -142,16 +145,17 @@
      :inner-type inner-type
      :outer-type (nth types num-prefixed-lookups)
      :inlined? (instance? IFixedInlinedType inner-type)
-     :offset-exprs (collapse-exprs offsets)}))
+     :offset-exprs (collapse-exprs offsets)
+     :validation-exprs validations}))
 
 ;;; 
 
 (defn- field-operation
-  [env x fields inlined-form non-inlined-form]
+  [env x fields validate? inlined-form non-inlined-form]
   (let [type-sym (element-type env x)
         type (resolve-type type-sym)
         x (with-meta x {})
-        {:keys [inner-type inlined? type-form-fn offset-exprs]} (lookup-info type (rest fields))
+        {:keys [inner-type inlined? type-form-fn offset-exprs validations]} (lookup-info type (rest fields))
         x-sym (if (symbol? x) x (gensym "x"))
         form ((if inlined?
                 inlined-form
@@ -161,27 +165,45 @@
                 (type-form-fn type-sym))
               x-sym
               `(s/unwrap-byte-seq ~x-sym)
-              `(p/+ (s/index-offset ~x-sym ~(first fields)) ~@offset-exprs))]
+              `(p/+ (s/index-offset ~x-sym ~(first fields)) ~@offset-exprs))
+        validation (when validate?
+                     (concat
+                       validations
+                       (when (symbol? (first fields))
+                         [`(when (>= (long ~(first fields))
+                                   (.count ~(with-meta x-sym {:tag "clojure.lang.Counted"})))
+                             (throw
+                               (IndexOutOfBoundsException.
+                                 (str ~(str (first fields)) ": " ~(first fields)))))])))]
     (unify-gensyms
       (if (= x x-sym)
-        form
-        `(let [~x-sym ~x] ~form)))))
+        `(do
+           ~@validation
+           ~form)
+        `(let [~x-sym ~x]
+           ~@validation
+           ~form)))))
 
-(defmacro get-in
-  "Like `get-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
-   which allows for compile-time calculation of the offset, and validation of the lookup."
-  [s fields]
-  (field-operation &env s fields
+(defn- get-in-form [s fields env validate?]
+  (field-operation env s fields validate?
     (fn [type seq byte-seq offset]
       (s/read-form type byte-seq offset))
     (fn [type seq byte-seq offset]
       `(s/read-value ~type ~byte-seq ~offset))))
 
-(defmacro set-in!
-  "Like `assoc-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
+(defmacro get-in
+  "Like `get-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
    which allows for compile-time calculation of the offset, and validation of the lookup."
-  [s fields val]
-  (field-operation &env s fields
+  [s fields]
+  (get-in-form s fields &env (not b/use-unsafe?)))
+
+(defmacro get-in'
+  "An unsafe version of `vertigo.core/get-in` which doesn't do runtime index checking."
+  [s fields]
+  (get-in-form s fields &env false))
+
+(defn- set-in-form [s fields val env validate?]
+  (field-operation env s fields validate?
     (fn [type seq byte-seq offset]
       `(do
          ~(s/write-form type byte-seq offset val)
@@ -191,11 +213,19 @@
          (s/write-value ~type ~byte-seq ~offset ~val)
          nil))))
 
-(defmacro update-in!
-  "Like `update-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
+(defmacro set-in!
+  "Like `assoc-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
    which allows for compile-time calculation of the offset, and validation of the lookup."
-  [s fields f & args]
-  (field-operation &env s fields
+  [s fields val]
+  (set-in-form s fields val &env (not b/use-unsafe?)))
+
+(defmacro set-in!'
+  "An unsafe version of `set-in!` which doesn't do runtime index checking."
+  [s fields val]
+  (set-in-form s fields val &env (not b/use-unsafe?)))
+
+(defn- update-in-form [s fields f args env validate?]
+  (field-operation env s fields false
     (fn [type seq byte-seq offset]
       `(let [offset## ~offset
              byte-seq## ~byte-seq
@@ -211,6 +241,19 @@
             val'# (~f val# ~@args)]
         (s/write-value element-type# byte-seq# offset# val'#)
         nil))))
+
+(defmacro update-in!
+  "Like `update-in`, but for sequences of typed-structs. The sequence `s` must be keyword type-hinted with the element type,
+   which allows for compile-time calculation of the offset, and validation of the lookup."
+  [s fields f & args]
+  (update-in-form s fields f args &env (not b/use-unsafe?)))
+
+(defmacro update-in!'
+  "An unsafe version of `update-in!` which doesn't do runtime index checking."
+  [s fields f & args]
+  (update-in-form s fields f args &env false))
+
+;;;
 
 (defn- over- [s lookup]
   (let [element-type (s/element-type s)
@@ -288,6 +331,103 @@
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
 
+(defn iteration-arguments [seq-bindings value-bindings env]
+  (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
+        seq-bindings (take-while (complement keyword?) seq-bindings)
+        elements (->> seq-bindings (partition 2) (map first))
+        seqs (->> seq-bindings (take-while (complement keyword?)) (partition 2) (map second))
+        value-syms (->> value-bindings (partition 2) (map first))
+        initial-values (->> value-bindings (partition 2) (map second))
+        seq-syms (repeatedly #(gensym "seq"))
+        over? (clojure.core/every?
+                #(and (seq? %)
+                   (or (= 'over (first %))
+                     (= #'vertigo.core/over (resolve (first %)))))
+                seqs)
+        arguments {:over? over?
+                   :seqs (zipmap
+                           (if over?
+                             (map second seqs)
+                             seqs)
+                           (map
+                             #(zipmap [:element :sym] %&)
+                             elements
+                             seq-syms))
+                   :values (zipmap
+                             value-syms
+                             (map
+                               #(zipmap [:initial] %&)
+                               initial-values))}]
+    (if-not over?
+
+      (merge arguments
+        {:step (long (get seq-options :step 1))
+         :limit (get seq-options :limit `cnt##)})
+
+      (let [fields (map last seqs)
+            seqs (map second seqs)
+            iterators (->> fields
+                        first
+                        (filter free-variable?)
+                        (map #(if (= '_ %) (gensym "?itr__") %)))
+            fields (map
+                     #(first
+                        (reduce
+                          (fn [[fields iterators] field]
+                            (if (free-variable? field)
+                              [(conj fields (first iterators)) (rest iterators)]
+                              [(conj fields field) iterators]))
+                          [[] iterators]
+                          %))
+                     fields)
+            lengths (map
+                      (fn [seq-syms seq fields]
+                        (cons
+                          `(.count ~(with-meta seq-syms {:tag "clojure.lang.Counted"}))
+                          (rest
+                            (:lengths
+                              (lookup-info
+                                (s/array
+                                  (->> seq (element-type env) resolve-type)
+                                  Integer/MAX_VALUE)
+                                fields)))))
+                      seq-syms
+                      seqs
+                      fields)
+            steps (if-let [step (seq-options :step)]
+                    (if (= 1 (count iterators))
+                      [step]
+                      (throw (IllegalArgumentException.
+                               ":step is ambiguous when there are multiple free variables.")))
+                    (map #(get (:steps seq-options) % 1) iterators))
+            limits (merge
+                     (->> (mapcat (partial map vector) (map rest fields) (map rest lengths))
+                       (filter #(symbol? (first %)))
+                       (map #(apply hash-map %))
+                       (apply merge-with max))
+                     (if-let [limit (seq-options :limit)]
+                       (if (= 1 (count iterators))
+                         {(first iterators) limit}
+                         (throw (IllegalArgumentException.
+                                  ":limit is ambiguous when there are multiple free variables.")))
+                       (-> (zipmap (rest (first fields)) (rest lengths))
+                         (assoc (ffirst fields) `cnt##)
+                         (merge (seq-options :limits))
+                         (select-keys iterators))))]
+        (merge
+          (reduce
+            (fn [m [seq fields]]
+              (assoc-in m [:seqs seq :fields] fields))
+            arguments
+            (map list seqs fields))
+          {:limits limits}
+          {:iterators (zipmap
+                        iterators
+                        (map #(zipmap [:length :step :limit] %&)
+                          (first lengths)
+                          steps
+                          (map #(get limits %) iterators)))})))))
+
 ;; todo: refactor this into to something not monstrous and terrifying
 (defn- iteration-form [seq-bindings value-bindings env body]
   (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
@@ -296,7 +436,9 @@
         seqs (->> seq-bindings (take-while (complement keyword?)) (partition 2) (map second))
         accumulators (->> value-bindings (partition 2) (map first))
         initial-values (->> value-bindings (partition 2) (map second))
-        over? (every? #(and (seq? %) (or (= 'over (first %)) (= #'vertigo.core/over (resolve (first %))))) seqs)
+        over? (clojure.core/every?
+                #(and (seq? %) (or (= 'over (first %)) (= #'vertigo.core/over (resolve (first %)))))
+                seqs)
         seq-syms (repeatedly #(gensym "seq"))]
     (if-not over?
 
@@ -309,7 +451,7 @@
                                  `(.count ~(with-meta (first seq-syms) {:tag "clojure.lang.Counted"}))))]
              (loop [idx## 0, ~@(interleave accumulators initial-values)]
                (if (< idx## limit#)
-                 (let [~@(interleave elements (map (fn [s] `(get-in ~s [idx##])) seq-syms))]
+                 (let [~@(interleave elements (map (fn [s] `(get-in' ~s [idx##])) seq-syms))]
                    ~(walk-return-exprs
                       (fn [x]
                         (cond
@@ -380,7 +522,7 @@
 
             body `(let [~@(interleave
                             elements
-                            (map (fn [s fields] `(get-in ~s [~@fields])) seq-syms fields))]
+                            (map (fn [s fields] `(get-in' ~s [~@fields])) seq-syms fields))]
                     ~(walk-return-exprs
                        (fn [x]
                          (cond
@@ -466,3 +608,45 @@
        (+ x sum)"
   [seq-bindings value-bindings & body]
   (iteration-form seq-bindings value-bindings &env body))
+
+;;;
+
+(defmacro sum
+  "Returns the sum of all numbers within the sequence.
+
+     (sum s)
+
+   or
+
+     (sum s :step 2, :limit 10)"
+  [s & options]
+  `(doreduce [x# ~s ~@options] [sum# 0]
+     (p/+ x# sum#)))
+
+(defmacro every?
+  "Returns true if `pred-expr` returns true for all `x` in `s`.
+
+     (every? [x s] (pos? x))
+
+   or
+
+     (every? [x s, :limit 10] (even? x))"
+  [[x s & options] pred-expr]
+  `(doreduce [~x ~s ~@options] [bool# true]
+     (if ~pred-expr
+       true
+       (break false))))
+
+(defmacro any?
+  "Returns true if `pred-expr` returns true for some `x` in `s`.
+
+     (any? [x s] (zero? x))
+
+   or
+
+     (any? [x s, :step 42] (neg? x))"
+  [[x s & options] pred-expr]
+  `(doreduce [~x ~s ~@options] [bool# false]
+     (if ~pred-expr
+       (break true)
+       false)))
