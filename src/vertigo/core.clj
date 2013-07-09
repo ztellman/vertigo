@@ -79,9 +79,9 @@
   "Walks the field sequence, returning a descriptor of offsets, lengths, and other useful
    information."
   [type fields]
-  (let [{:keys [types type-form-fn offsets lengths validations]}
+  (let [{:keys [types type-form-fn offsets lengths limits]}
         (reduce
-          (fn [{:keys [types type-form-fn offsets lengths validations]} field]
+          (fn [{:keys [types type-form-fn offsets lengths limits]} field]
             (let [type (last types)
                   _  (validate-lookup type field)
                   inner-type (s/field-type type field)
@@ -97,10 +97,10 @@
                             `(p/* ~(s/byte-size (s/field-type type 0)) (long ~field))
                             (s/field-offset type field)))
                :lengths (conj lengths length)
-               :validations (conj validations
-                              `(when (< (long ~field) ~length)
-                                 (IndexOutOfBoundsException. (str ~(str field) ": " ~field))))}))
-          {:types [type], :type-form-fn identity, :offsets [],  :lengths [], :validations []}
+               :limits (if (symbol? field)
+                         (merge-with min limits {field length})
+                         limits)}))
+          {:types [type], :type-form-fn identity, :offsets [],  :lengths [], :limits {}}
           fields)
         
         inner-type (or (last types) type)
@@ -146,7 +146,11 @@
      :outer-type (nth types num-prefixed-lookups)
      :inlined? (instance? IFixedInlinedType inner-type)
      :offset-exprs (collapse-exprs offsets)
-     :validation-exprs validations}))
+     :validation-exprs (map
+                         (fn [[field length]]
+                           `(when (>= (long ~field) ~length)
+                              (throw (IndexOutOfBoundsException. (str ~(str field) ": " ~field)))))
+                         limits)}))
 
 ;;; 
 
@@ -155,7 +159,7 @@
   (let [type-sym (element-type env x)
         type (resolve-type type-sym)
         x (with-meta x {})
-        {:keys [inner-type inlined? type-form-fn offset-exprs validations]} (lookup-info type (rest fields))
+        {:keys [inner-type inlined? type-form-fn offset-exprs validation-exprs]} (lookup-info type (rest fields))
         x-sym (if (symbol? x) x (gensym "x"))
         form ((if inlined?
                 inlined-form
@@ -168,7 +172,7 @@
               `(p/+ (s/index-offset ~x-sym ~(first fields)) ~@offset-exprs))
         validation (when validate?
                      (concat
-                       validations
+                       validation-exprs
                        (when (symbol? (first fields))
                          [`(when (>= (long ~(first fields))
                                    (.count ~(with-meta x-sym {:tag "clojure.lang.Counted"})))
@@ -345,24 +349,20 @@
                      (= #'vertigo.core/over (resolve (first %)))))
                 seqs)
         arguments {:over? over?
-                   :seqs (zipmap
-                           (if over?
-                             (map second seqs)
-                             seqs)
-                           (map
-                             #(zipmap [:element :sym] %&)
-                             elements
-                             seq-syms))
-                   :values (zipmap
-                             value-syms
-                             (map
-                               #(zipmap [:initial] %&)
-                               initial-values))}]
+                   :seqs (map
+                           #(zipmap [:element :sym :expr] %&)
+                           elements
+                           seq-syms
+                           seqs)
+                   :values (map
+                             #(zipmap [:initial :sym] %&)
+                             initial-values
+                             value-syms)}]
     (if-not over?
 
       (merge arguments
         {:step (long (get seq-options :step 1))
-         :limit (get seq-options :limit `cnt##)})
+         :limit (get seq-options :limit `(long (.count ~(with-meta (first seqs) {:tag "clojure.lang.Counted"}))))})
 
       (let [fields (map last seqs)
             seqs (map second seqs)
@@ -380,78 +380,89 @@
                           [[] iterators]
                           %))
                      fields)
+            lookup-info (map
+                          (fn [seq fields]
+                            (lookup-info
+                              (s/array
+                                (->> seq (element-type env) resolve-type)
+                                Integer/MAX_VALUE)
+                              fields))
+                          seqs
+                          fields) 
             lengths (map
-                      (fn [seq-syms seq fields]
+                      (fn [seq-syms lengths]
                         (cons
                           `(.count ~(with-meta seq-syms {:tag "clojure.lang.Counted"}))
-                          (rest
-                            (:lengths
-                              (lookup-info
-                                (s/array
-                                  (->> seq (element-type env) resolve-type)
-                                  Integer/MAX_VALUE)
-                                fields)))))
+                          (rest lengths)))
                       seq-syms
-                      seqs
-                      fields)
+                      (map :lengths lookup-info))
             steps (if-let [step (seq-options :step)]
                     (if (= 1 (count iterators))
                       [step]
                       (throw (IllegalArgumentException.
                                ":step is ambiguous when there are multiple free variables.")))
                     (map #(get (:steps seq-options) % 1) iterators))
-            limits (merge
-                     (->> (mapcat (partial map vector) (map rest fields) (map rest lengths))
-                       (filter #(symbol? (first %)))
-                       (map #(apply hash-map %))
-                       (apply merge-with max))
+
+            bounds (->> (mapcat (partial map vector) fields lengths)
+                     (filter #(symbol? (first %)))
+                     (map #(apply hash-map %))
+                     (apply merge-with min))
+            limits (merge bounds
                      (if-let [limit (seq-options :limit)]
                        (if (= 1 (count iterators))
                          {(first iterators) limit}
                          (throw (IllegalArgumentException.
                                   ":limit is ambiguous when there are multiple free variables.")))
-                       (-> (zipmap (rest (first fields)) (rest lengths))
-                         (assoc (ffirst fields) `cnt##)
-                         (merge (seq-options :limits))
-                         (select-keys iterators))))]
+                       (seq-options :limits)))]
+
+        (doseq [k (keys limits)]
+          (when (and
+                  (number? (limits k))
+                  (number? (bounds k))
+                  (> (limits k) (bounds k)))
+            (throw (IllegalArgumentException.
+                     (str ":limit of " (limits k) " is greater than max value " (bounds k))))))
+        
         (merge
-          (reduce
-            (fn [m [seq fields]]
-              (assoc-in m [:seqs seq :fields] fields))
-            arguments
-            (map list seqs fields))
-          {:limits limits}
-          {:iterators (zipmap
-                        iterators
-                        (map #(zipmap [:length :step :limit] %&)
+          (update-in arguments [:seqs]
+            (fn [seqs]
+              (map
+                #(-> %1
+                   (assoc :fields %2)
+                   (update-in [:expr] second))
+                seqs
+                fields)))
+          (let [iterator-limits (map #(get limits %) iterators)]
+            {:limits limits
+             :iterators (map #(zipmap [:sym :length :step :limit :limit-sym] %&)
+                          iterators
                           (first lengths)
                           steps
-                          (map #(get limits %) iterators)))})))))
+                          iterator-limits
+                          (map #(when-not (number? %) (gensym "lmt__")) iterator-limits))}))))))
 
 ;; todo: refactor this into to something not monstrous and terrifying
 (defn- iteration-form [seq-bindings value-bindings env body]
-  (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
-        seq-bindings (take-while (complement keyword?) seq-bindings)
-        elements (->> seq-bindings (partition 2) (map first))
-        seqs (->> seq-bindings (take-while (complement keyword?)) (partition 2) (map second))
-        accumulators (->> value-bindings (partition 2) (map first))
-        initial-values (->> value-bindings (partition 2) (map second))
-        over? (clojure.core/every?
-                #(and (seq? %) (or (= 'over (first %)) (= #'vertigo.core/over (resolve (first %)))))
-                seqs)
-        seq-syms (repeatedly #(gensym "seq"))]
+  (let [{:keys [over?] :as arguments} (iteration-arguments seq-bindings value-bindings env)]
     (if-not over?
 
       ;; normal linear iteration
-      (let [step (long (get seq-options :step 1))]
+      (let [{:keys [step limit values seqs]} arguments]
         (unify-gensyms
-          `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
-                 limit# (long ~(if-let [limit (seq-options :limit)]
-                                 limit
-                                 `(.count ~(with-meta (first seq-syms) {:tag "clojure.lang.Counted"}))))]
-             (loop [idx## 0, ~@(interleave accumulators initial-values)]
+          `(let [~@(mapcat
+                     (fn [{:keys [sym expr]}]
+                       (list (with-element-type sym expr env) expr))
+                     seqs)
+                 limit# ~limit]
+             (loop [idx## 0, ~@(mapcat
+                                 (fn [{:keys [initial sym]}]
+                                   [sym initial])
+                                 values)]
                (if (< idx## limit#)
-                 (let [~@(interleave elements (map (fn [s] `(get-in' ~s [idx##])) seq-syms))]
+                 (let [~@(mapcat
+                           (fn [{:keys [sym element]}]
+                             [element `(get-in' ~sym [idx##])])
+                           seqs)]
                    ~(walk-return-exprs
                       (fn [x]
                         (cond
@@ -461,68 +472,27 @@
                             (second x)
                             `(vector ~@(rest x)))
                           
-                          (= 1 (count accumulators))
+                          (= 1 (count values))
                           `(recur (p/+ idx## ~step) ~x)
                           
-                          (not= (count accumulators) (count x))
+                          (not= (count values) (count x))
                           (throw
                             (IllegalArgumentException.
-                              (str "expected " (count accumulators) " return values, got " (count x))))
+                              (str "expected " (count values) " return values, got " (count x))))
                           
                           :else
                           `(recur (p/+ idx## ~step) ~@x)))
                       `(do ~@body)))
-                 ~(if (= 1 (count accumulators))
-                    (first accumulators)
-                    `(vector ~@accumulators)))))))
+                 ~(if (= 1 (count values))
+                    (:sym (first values))
+                    `(vector ~@(map :sym values))))))))
 
       ;; multi-dimensional iteration
-      (let [fields (map last seqs)
-            seqs (map second seqs)
-            iterators (->> fields
-                        first
-                        (filter free-variable?)
-                        (map #(if (= '_ %) (gensym "?itr__") %)))
-            fields (map
-                     #(first
-                        (reduce
-                          (fn [[fields iterators] field]
-                            (if (free-variable? field)
-                              [(conj fields (first iterators)) (rest iterators)]
-                              [(conj fields field) iterators]))
-                          [[] iterators]
-                          %))
-                     fields)
-            {:keys [lengths]} (lookup-info
-                                (s/array
-                                  (->> seqs first (element-type env) resolve-type)
-                                  Integer/MAX_VALUE)
-                                (first fields))
-            iterator->step (if-let [step (seq-options :step)]
-                             (if (= 1 (count iterators))
-                               {(first iterators) step}
-                               (throw (IllegalArgumentException.
-                                        ":step is ambiguous when there are multiple free variables.")))
-                             (merge
-                               (zipmap iterators (repeat 1))
-                               (seq-options :steps)))
-            iterator->limit (if-let [limit (seq-options :limit)]
-                              (if (= 1 (count iterators))
-                                {(first iterators) limit}
-                                (throw (IllegalArgumentException.
-                                         ":limit is ambiguous when there are multiple free variables.")))
-                              (-> (zipmap (rest (first fields)) (rest lengths))
-                                (assoc (ffirst fields) `cnt##)
-                                (merge (seq-options :limits))
-                                (select-keys iterators)))
-            iterator->limit-sym (zipmap
-                                  (->> iterator->limit keys (remove #(number? (iterator->limit %))))
-                                  (repeatedly #(gensym "lim__")))
-            iterator->limit-val (merge iterator->limit iterator->limit-sym)
-
-            body `(let [~@(interleave
-                            elements
-                            (map (fn [s fields] `(get-in' ~s [~@fields])) seq-syms fields))]
+      (let [{:keys [seqs limits values iterators]} arguments
+            body `(let [~@(mapcat
+                           (fn [{:keys [sym element fields]}]
+                             [element `(get-in' ~sym [~@fields])])
+                           seqs)]
                     ~(walk-return-exprs
                        (fn [x]
                          (cond
@@ -532,53 +502,65 @@
                              (second x)
                              `(vector ~@(rest x)))
                              
-                           (= 1 (count accumulators))
-                           `(recur ~@iterators ~x)
+                           (= 1 (count values))
+                           `(recur ~@(map :sym iterators) ~x)
                              
-                           (not= (count accumulators) (count x))
+                           (not= (count values) (count x))
                            (throw
                              (IllegalArgumentException.
-                               (str "expected " (count accumulators) " return values, got " (count x))))
+                               (str "expected " (count values) " return values, got " (count x))))
                              
                            :else
-                           `(recur ~@iterators ~@x)))
+                           `(recur ~@(map :sym iterators) ~@x)))
                        `(do ~@body)))
-
             root-iterator (last iterators)]
 
         (unify-gensyms
-          `(let [~@(mapcat #(list (with-element-type %1 %2 env) %2) seq-syms seqs)
-                 cnt## (long (.count ~(with-meta (first seqs) {:tag "clojure.lang.Counted"})))
-                 ~@(apply concat
-                     (map
-                       (fn [[i sym]]
-                         `(~sym ~(iterator->limit i)))
-                       iterator->limit-sym))]
-             (loop [~@(interleave (butlast iterators) (repeat 0))
-                    ~root-iterator ~(- (iterator->step root-iterator))
-                    ~@(interleave
-                        accumulators
-                        initial-values)]
-               (let [~root-iterator (p/+ ~root-iterator ~(iterator->step root-iterator))
-                     ~@(apply concat
-                         (map
-                           (fn [[i j]]
-                             `(~j (if (>= ~i ~(iterator->limit-val i))
-                                    (p/+ ~j ~(iterator->step j))
-                                    ~j)))
-                           (partition 2 1 (reverse iterators))))
-                     ~@(apply concat
-                         (map
-                           (fn [i]
-                             `(~i (if (>= ~i ~(iterator->limit-val i))
-                                    0
-                                    ~i)))
-                           (rest iterators)))]
-                 (if (< ~(first iterators) ~(iterator->limit-val (first iterators)))
-                   ~body
-                   ~(if (= 1 (count accumulators))
-                      (first accumulators)
-                      `(vector ~@accumulators)))))))))))
+          `(do
+             ~@(when-not b/use-unsafe?
+                 (->> limits
+                   (filter (fn [[sym lim]] (and (symbol? sym) (number? lim))))
+                   (remove #(free-variable? (first %)))
+                   (map (fn [[sym limit]]
+                          `(if (>= ~sym ~(long limit))
+                             (throw (IndexOutOfBoundsException.
+                                      (str ~(str sym) ": "(str ~sym)))))))))
+             (let [~@(mapcat
+                       (fn [{:keys [sym expr]}]
+                         (list (with-element-type sym expr env) expr))
+                       seqs)
+                   cnt## ~(:limit (first iterators))
+                   ~@(mapcat
+                      (fn [{:keys [limit-sym limit]}]
+                        (when limit-sym
+                          [limit-sym limit]))
+                      (butlast iterators))]
+              (loop [~@(interleave (map :sym (butlast iterators)) (repeat 0))
+                     ~(:sym root-iterator) ~(- (:step root-iterator))
+                     ~@(mapcat
+                         (fn [{:keys [sym initial]}]
+                           [sym initial])
+                         values)]
+                (let [~(:sym root-iterator) (p/+ ~(:sym root-iterator) ~(:step root-iterator))
+                      ~@(mapcat
+                          (fn [[i j]]
+                            `(~(:sym j)
+                              (if (>= ~(:sym i) ~(or (:limit-sym i) (:limit i)))
+                                (p/+ ~(:sym j) ~(:step j))
+                                ~(:sym j))))
+                          (partition 2 1 (reverse iterators)))
+                      ~@(mapcat
+                          (fn [i]
+                            `(~(:sym i)
+                              (if (>= ~(:sym i) ~(or (:limit-sym i) (:limit i)))
+                                0
+                                ~(:sym i))))
+                          (rest iterators))]
+                  (if (< ~(:sym (first iterators)) cnt##)
+                    ~body
+                    ~(if (= 1 (count values))
+                       (:sym (first values))
+                       `(vector ~@(map :sym values)))))))))))))
 
 (defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.

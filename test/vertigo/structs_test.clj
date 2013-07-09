@@ -65,6 +65,10 @@
           (get-in ms [0 :x])
           (let [idx 0]
             (c/get-in ms [idx :y idx]))))
+
+    (is (thrown? IndexOutOfBoundsException
+          (let [n 11]
+            (prn (c/get-in ms [0 :y n])))))
       
     (is (= (range 10)
           (c/get-in ms [0 :y])

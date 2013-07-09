@@ -48,26 +48,27 @@
 (deftest test-doreduce
 
   ;; 1d
-  (is (= (reduce + (range array-dim))
-        (c/doreduce [x int64-array] [sum 0]
-          (+ x sum))))
-  (is (= (reduce + (range 10))
-        (c/doreduce [x int64-array] [sum 0]
-          (if (= 10 x)
-            (break sum)
-            (+ x sum)))))
-  (is (= (* 2 (reduce + (range array-dim)))
-        (c/doreduce [x int64-array, y int64-array] [sum 0]
-          (+ x y sum))))
-  (is (= (->> (range array-dim) (partition 2) (map first) (reduce +))
-        (c/doreduce [x int64-array :step 2] [sum 0]
-          (+ x sum))))
-  (is (= (->> (range array-dim) (take 600) (partition 4) (map first) (reduce +))
-        (c/doreduce [x int64-array :step 4 :limit 600] [sum 0]
-          (+ x sum))))
-  (is (= [(reduce + (range 10)) (reduce * (range 1 11))]
-        (c/doreduce [x int64-array :limit 10] [sum 0, product 1]
-          [(+ x sum) (* (inc x) product)])))
+  (comment
+    (is (= (reduce + (range array-dim))
+         (c/doreduce [x int64-array] [sum 0]
+           (+ x sum))))
+    (is (= (reduce + (range 10))
+          (c/doreduce [x int64-array] [sum 0]
+            (if (= 10 x)
+              (break sum)
+              (+ x sum)))))
+    (is (= (* 2 (reduce + (range array-dim)))
+          (c/doreduce [x int64-array, y int64-array] [sum 0]
+            (+ x y sum))))
+    (is (= (->> (range array-dim) (partition 2) (map first) (reduce +))
+          (c/doreduce [x int64-array :step 2] [sum 0]
+            (+ x sum))))
+    (is (= (->> (range array-dim) (take 600) (partition 4) (map first) (reduce +))
+          (c/doreduce [x int64-array :step 4 :limit 600] [sum 0]
+            (+ x sum))))
+    (is (= [(reduce + (range 10)) (reduce * (range 1 11))]
+          (c/doreduce [x int64-array :limit 10] [sum 0, product 1]
+            [(+ x sum) (* (inc x) product)]))))
 
   ;; n-d
   (is (= (reduce + (range array-dim))
@@ -95,7 +96,20 @@
           (+ x sum))))
   (is (= (->> (range 200) (partition 2) (map first) (reduce +))
         (c/doreduce [x (over int64-matrices [?x _ ?z]) :limits {?x 2} :steps {?z 2}] [sum 0]
-          (+ x sum)))))
+          (+ x sum))))
+
+  (is (thrown? IllegalArgumentException
+        (eval
+          '(vertigo.core/doreduce [x (over int64-matrices [_ ?x _]) :limits {?x 11}] [sum 0]
+             (+ x sum)))))
+  (is (thrown? IndexOutOfBoundsException
+        (let [n 11]
+          (c/doreduce [x (over int64-matrices [?x n _]) :limits {?x 2}] [sum 0]
+            (+ x sum)))))
+  (is (thrown? IndexOutOfBoundsException
+        (let [n 11]
+          (c/doreduce [x (over int64-matrices [n _ _])] [sum 0]
+            (+ x sum))))))
 
 ;;;
 
