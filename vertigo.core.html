@@ -1,0 +1,194 @@
+<html lang="en">
+  <head>
+    <title>vertigo.core documentation</title>
+    <link href="css/default.css" type="text/css" rel="stylesheet" />
+    <link href="css/codox-md.css" type="text/css" rel="stylesheet" />
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/page_effects.js"></script>
+  </head>
+  <body>
+    <header>
+      <div id="header">
+        <h1 class="project-title">Vertigo 0.1.0-SNAPSHOT API documentation</h1>
+      </div>
+    </header>
+    <navigation>
+      <div id="namespaces" class="sidebar">
+        <h3>Namespaces</h3>
+        <ul class="ns-links">
+          <li class="ns-list"><a class="ns-link ns-name" href="vertigo.bytes.html">vertigo.bytes</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.core.html">vertigo.core</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.io.html">vertigo.io</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.structs.html">vertigo.structs</a></li>
+        </ul>
+      </div>
+      <div id="vars" class="sidebar">
+        <h3>Public Vars</h3>
+        <ul class="ns-var-links">
+          <li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-any%3F">any?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-doreduce">doreduce</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-every%3F">every?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in">get-in</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in%27">get-in'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-over">over</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21">set-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21%27">set-in!'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-sum">sum</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21">update-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21%27">update-in!'</a></li>
+        </ul>
+      </div>
+    </navigation>
+    <article>
+      <div id="content" class="namespace-docs">
+        <h2 class="namespace-title">vertigo.core documentation</h2>
+        <div class="doc">
+</div>
+        <div class="ns-vars">
+          <div class="public">
+            <h3><a id="var-any%3F" class="source var-name" href="/src/vertigo/core.clj">any?</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[[x s &amp; options] pred-expr]</div>
+            
+            
+            <div class="doc"><p>Returns true if <code>pred-expr</code> returns true for some <code>x</code> in <code>s</code>.</p>
+
+<p>  (any? [x s] (zero? x))</p>
+
+<p>or</p>
+
+<p>  (any? [x s, :step 42] (neg? x))</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-doreduce" class="source var-name" href="/src/vertigo/core.clj">doreduce</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[seq-bindings value-bindings &amp; body]</div>
+            
+            
+            <div class="doc"><p>A combination of <code>doseq</code> and <code>reduce</code>, this is a primitive for efficient batch operations over sequences.</p>
+
+<p><code>reduce-over</code> takes two binding forms, one for sequences that mirrors <code>doseq</code>, and a second for accumulators
+that mirrors <code>loop</code>.  If there is only one accumulator, the body must return the new value for the accumulator.
+If there are multiple accumulators, it must return a vector containing values for each.</p>
+
+<p>So we can easily calculate the sum of a sequence:</p>
+
+<p>  (reduce-over [x s] [sum 0]
+    (+ x sum))</p>
+
+<p>We can also sum together two sequences:</p>
+
+<p>  (reduce-over [x a, y b] [sum 0]
+    (+ x y sum))</p>
+
+<p>And we can also calculate the product and sum at the same time:</p>
+
+<p>  (reduce-over [x s] [sum 0, product 1]
+    [(+ x sum) (* x product)])</p>
+
+<p>We can also iterate over particular fields or arrays within a sequence:</p>
+
+<p>  (reduce-over [x (over s [_ :a :b])] [sum 0] 
+    (+ x sum)</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-every%3F" class="source var-name" href="/src/vertigo/core.clj">every?</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[[x s &amp; options] pred-expr]</div>
+            
+            
+            <div class="doc"><p>Returns true if <code>pred-expr</code> returns true for all <code>x</code> in <code>s</code>.</p>
+
+<p>  (every? [x s] (pos? x))</p>
+
+<p>or</p>
+
+<p>  (every? [x s, :limit 10] (even? x))</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-get-in" class="source var-name" href="/src/vertigo/core.clj">get-in</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields]</div>
+            
+            
+            <div class="doc"><p>Like <code>get-in</code>, but for sequences of typed-structs. The sequence <code>s</code> must be keyword type-hinted with the element type,
+which allows for compile-time calculation of the offset, and validation of the lookup.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-get-in%27" class="source var-name" href="/src/vertigo/core.clj">get-in'</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields]</div>
+            
+            
+            <div class="doc"><p>An unsafe version of <code>vertigo.core/get-in</code> which doesn't do runtime index checking.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-over" class="source var-name" href="/src/vertigo/core.clj">over</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields]</div>
+            
+            
+            <div class="doc"><p>Allows you to select a flattened subset of a sequence.  The <code>fields</code> are nested lookups,
+as you would use in <code>get-in</code>, but where a field describes an index in an array, the may be
+either '_' or a symbol prefixed with '?' to select all indices in that position.</p>
+
+<p>Take a 2x2 matrix of integers counting up from 0 to 3:</p>
+
+<p>  ((0 1) (2 3))</p>
+
+<p>We get a flattened view of all integers within the matrix by marking both indices as free:</p>
+
+<p>  (over s [_ _]) =&gt; (0 1 2 3)</p>
+
+<p>However, we can also iterate over only the elements in the first array:</p>
+
+<p>  (over s [0 _]) =&gt; (0 1)</p>
+
+<p>Or only the first elements of all arrays:</p>
+
+<p>  (over s [_ 0]) =&gt; (0 2)</p>
+
+<p>This syntax can be used in <code>doreduce</code> blocks to specify what subset to iterate over.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-set-in%21" class="source var-name" href="/src/vertigo/core.clj">set-in!</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields val]</div>
+            
+            
+            <div class="doc"><p>Like <code>assoc-in</code>, but for sequences of typed-structs. The sequence <code>s</code> must be keyword type-hinted with the element type,
+which allows for compile-time calculation of the offset, and validation of the lookup.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-set-in%21%27" class="source var-name" href="/src/vertigo/core.clj">set-in!'</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields val]</div>
+            
+            
+            <div class="doc"><p>An unsafe version of <code>set-in!</code> which doesn't do runtime index checking.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-sum" class="source var-name" href="/src/vertigo/core.clj">sum</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s &amp; options]</div>
+            
+            
+            <div class="doc"><p>Returns the sum of all numbers within the sequence.</p>
+
+<p>  (sum s)</p>
+
+<p>or</p>
+
+<p>  (sum s :step 2, :limit 10)</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-update-in%21" class="source var-name" href="/src/vertigo/core.clj">update-in!</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields f &amp; args]</div>
+            
+            
+            <div class="doc"><p>Like <code>update-in</code>, but for sequences of typed-structs. The sequence <code>s</code> must be keyword type-hinted with the element type,
+which allows for compile-time calculation of the offset, and validation of the lookup.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-update-in%21%27" class="source var-name" href="/src/vertigo/core.clj">update-in!'</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[s fields f &amp; args]</div>
+            
+            
+            <div class="doc"><p>An unsafe version of <code>update-in!</code> which doesn't do runtime index checking.</p>
+</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </body>
+
+</html>

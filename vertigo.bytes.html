@@ -1,0 +1,202 @@
+<html lang="en">
+  <head>
+    <title>vertigo.bytes documentation</title>
+    <link href="css/default.css" type="text/css" rel="stylesheet" />
+    <link href="css/codox-md.css" type="text/css" rel="stylesheet" />
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/page_effects.js"></script>
+  </head>
+  <body>
+    <header>
+      <div id="header">
+        <h1 class="project-title">Vertigo 0.1.0-SNAPSHOT API documentation</h1>
+      </div>
+    </header>
+    <navigation>
+      <div id="namespaces" class="sidebar">
+        <h3>Namespaces</h3>
+        <ul class="ns-links">
+          <li class="ns-list"><a class="ns-link ns-name" href="vertigo.bytes.html">vertigo.bytes</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.core.html">vertigo.core</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.io.html">vertigo.io</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.structs.html">vertigo.structs</a></li>
+        </ul>
+      </div>
+      <div id="vars" class="sidebar">
+        <h3>Public Vars</h3>
+        <ul class="ns-var-links">
+          <li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var--%3EByteSeq">-&gt;ByteSeq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var--%3EChunkedByteSeq">-&gt;ChunkedByteSeq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var--%3EUnsafeByteSeq">-&gt;UnsafeByteSeq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-big-endian%3F">big-endian?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-buffer">buffer</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-byte-count">byte-count</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-byte-order">byte-order</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-byte-seq">byte-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-byte-seq-reduce">byte-seq-reduce</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-close-fn">close-fn</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-cross-section">cross-section</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-direct-buffer">direct-buffer</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-drop-bytes">drop-bytes</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-flush-fn">flush-fn</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-little-endian%3F">little-endian?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-set-byte-order%21">set-byte-order!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-slice">slice</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-to-byte-seq">to-byte-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-to-chunked-byte-seq">to-chunked-byte-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.bytes.html#var-use-unsafe%3F">use-unsafe?</a></li>
+        </ul>
+      </div>
+    </navigation>
+    <article>
+      <div id="content" class="namespace-docs">
+        <h2 class="namespace-title">vertigo.bytes documentation</h2>
+        <div class="doc">
+</div>
+        <div class="ns-vars">
+          <div class="public">
+            <h3><a id="var--%3EByteSeq" class="source var-name" href="/src/vertigo/bytes.clj">-&gt;ByteSeq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[buf close-fn flush-fn]</div>
+            
+            
+            <div class="doc"><p>Positional factory function for class vertigo.bytes.ByteSeq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var--%3EChunkedByteSeq" class="source var-name" href="/src/vertigo/bytes.clj">-&gt;ChunkedByteSeq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[buf chunk-size next-chunk close-fn flush-fn]</div>
+            
+            
+            <div class="doc"><p>Positional factory function for class vertigo.bytes.ChunkedByteSeq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var--%3EUnsafeByteSeq" class="source var-name" href="/src/vertigo/bytes.clj">-&gt;UnsafeByteSeq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[unsafe buf loc close-fn flush-fn]</div>
+            
+            
+            <div class="doc"><p>Positional factory function for class vertigo.bytes.UnsafeByteSeq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-big-endian%3F" class="source var-name" href="/src/vertigo/bytes.clj">big-endian?</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[byte-seq]</div>
+            
+            
+            <div class="doc"><p>Returns true if the byte-seq is big-endian.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-buffer" class="source var-name" href="/src/vertigo/bytes.clj">buffer</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[size]</div>
+            
+            
+            <div class="doc"><p>Creates a byte-buffer.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-byte-count" class="source var-name" href="/src/vertigo/bytes.clj">byte-count</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the number of bytes in the byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-byte-order" class="source var-name" href="/src/vertigo/bytes.clj">byte-order</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the java.nio.ByteOrder of the underlying buffer.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-byte-seq" class="source var-name" href="/src/vertigo/bytes.clj">byte-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[buf]</div><div class="usage">[buf close-fn flush-fn]</div>
+            
+            
+            <div class="doc"><p>Wraps a byte-buffer inside a byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-byte-seq-reduce" class="source var-name" href="/src/vertigo/bytes.clj">byte-seq-reduce</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ stride read-fn f start]</div>
+            
+            
+            <div class="doc"><p>A byte-seq specific version of the CollReduce protocol.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-close-fn" class="source var-name" href="/src/vertigo/bytes.clj">close-fn</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the function, if it exists, that closes the underlying source of bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-cross-section" class="source var-name" href="/src/vertigo/bytes.clj">cross-section</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[byte-seq offset length stride]</div>
+            
+            
+            <div class="doc"><p>Returns a chunked-byte-seq representing a sequence of slices, starting at <code>offset</code>, <code>length</code>
+bytes long, and separated by <code>stride</code> bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-direct-buffer" class="source var-name" href="/src/vertigo/bytes.clj">direct-buffer</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[size]</div>
+            
+            
+            <div class="doc"><p>Creates a direct byte-buffer.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-drop-bytes" class="source var-name" href="/src/vertigo/bytes.clj">drop-bytes</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ n]</div>
+            
+            
+            <div class="doc"><p>Returns a new byte-seq without the first <code>n</code> bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-flush-fn" class="source var-name" href="/src/vertigo/bytes.clj">flush-fn</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the function, if it exists, that flushes the underlying source of bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-little-endian%3F" class="source var-name" href="/src/vertigo/bytes.clj">little-endian?</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[byte-seq]</div>
+            
+            
+            <div class="doc"><p>Returns true if the byte-seq is little-endian.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-set-byte-order%21" class="source var-name" href="/src/vertigo/bytes.clj">set-byte-order!</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ order]</div>
+            
+            
+            <div class="doc"><p>Sets the byte order of the underlying buffer, and returns the byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-slice" class="source var-name" href="/src/vertigo/bytes.clj">slice</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ offset len]</div>
+            
+            
+            <div class="doc"><p>Returns a subset of the byte-seq, starting at <code>offset</code> bytes, and <code>len</code> bytes long.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-to-byte-seq" class="source var-name" href="/src/vertigo/bytes.clj">to-byte-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[x]</div><div class="usage">[x options]</div>
+            
+            
+            <div class="doc"><p>Converts <code>x</code> to a byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-to-chunked-byte-seq" class="source var-name" href="/src/vertigo/bytes.clj">to-chunked-byte-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[x]</div><div class="usage">[x options]</div>
+            
+            
+            <div class="doc"><p>Converts <code>x</code> to a chunked-byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-use-unsafe%3F" class="source var-name" href="/src/vertigo/bytes.clj">use-unsafe?</a></h3>
+            <h4 class="var-type var" id="var-type">var</h4>
+            
+            
+            
+            <div class="doc"><p>If true, disables all runtime index bounds checking.</p>
+</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </body>
+
+</html>

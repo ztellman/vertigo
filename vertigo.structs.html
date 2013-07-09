@@ -1,0 +1,182 @@
+<html lang="en">
+  <head>
+    <title>vertigo.structs documentation</title>
+    <link href="css/default.css" type="text/css" rel="stylesheet" />
+    <link href="css/codox-md.css" type="text/css" rel="stylesheet" />
+    <script type="text/javascript" src="js/jquery.min.js"></script>
+    <script type="text/javascript" src="js/page_effects.js"></script>
+  </head>
+  <body>
+    <header>
+      <div id="header">
+        <h1 class="project-title">Vertigo 0.1.0-SNAPSHOT API documentation</h1>
+      </div>
+    </header>
+    <navigation>
+      <div id="namespaces" class="sidebar">
+        <h3>Namespaces</h3>
+        <ul class="ns-links">
+          <li class="ns-list"><a class="ns-link ns-name" href="vertigo.bytes.html">vertigo.bytes</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.core.html">vertigo.core</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.io.html">vertigo.io</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.structs.html">vertigo.structs</a></li>
+        </ul>
+      </div>
+      <div id="vars" class="sidebar">
+        <h3>Public Vars</h3>
+        <ul class="ns-var-links">
+          <li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var--%3EByteSeqWrapper">-&gt;ByteSeqWrapper</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var--%3EFixedTypeArray">-&gt;FixedTypeArray</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-array">array</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-byte-size">byte-size</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-def-typed-struct">def-typed-struct</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-element-type">element-type</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-field-offset">field-offset</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-field-type">field-type</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-has-field%3F">has-field?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-index-offset">index-offset</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-read-form">read-form</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-read-value">read-value</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-typed-struct">typed-struct</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-unwrap-byte-seq">unwrap-byte-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-wrap-byte-seq">wrap-byte-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-write-form">write-form</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.structs.html#var-write-value">write-value</a></li>
+        </ul>
+      </div>
+    </navigation>
+    <article>
+      <div id="content" class="namespace-docs">
+        <h2 class="namespace-title">vertigo.structs documentation</h2>
+        <div class="doc">
+</div>
+        <div class="ns-vars">
+          <div class="public">
+            <h3><a id="var--%3EByteSeqWrapper" class="source var-name" href="/src/vertigo/structs.clj">-&gt;ByteSeqWrapper</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[stride offset type byte-seq]</div>
+            
+            
+            <div class="doc"><p>Positional factory function for class vertigo.structs.ByteSeqWrapper.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var--%3EFixedTypeArray" class="source var-name" href="/src/vertigo/structs.clj">-&gt;FixedTypeArray</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type len offset stride]</div>
+            
+            
+            <div class="doc"><p>Positional factory function for class vertigo.structs.FixedTypeArray.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-array" class="source var-name" href="/src/vertigo/structs.clj">array</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type &amp; dims]</div>
+            
+            
+            <div class="doc"><p>Returns a type representing an array of <code>type</code> with dimensions <code>dims</code>.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-byte-size" class="source var-name" href="/src/vertigo/structs.clj">byte-size</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>The size of the primitive type, in bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-def-typed-struct" class="source var-name" href="/src/vertigo/structs.clj">def-typed-struct</a></h3>
+            <h4 class="var-type macro" id="var-type">macro</h4>
+            <div class="usage">[name &amp; field+types]</div>
+            
+            
+            <div class="doc"><p>Like <code>typed-struct</code>, but defines a var.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-element-type" class="source var-name" href="/src/vertigo/structs.clj">element-type</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the type of the elements within the seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-field-offset" class="source var-name" href="/src/vertigo/structs.clj">field-offset</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ x]</div>
+            
+            
+            <div class="doc"><p>Returns of the offset of the field within the struct, in bytes.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-field-type" class="source var-name" href="/src/vertigo/structs.clj">field-type</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ x]</div>
+            
+            
+            <div class="doc"><p>Returns the type of the field.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-has-field%3F" class="source var-name" href="/src/vertigo/structs.clj">has-field?</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ x]</div>
+            
+            
+            <div class="doc"><p>Returns true if the type has the given field, false otherwise</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-index-offset" class="source var-name" href="/src/vertigo/structs.clj">index-offset</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ idx]</div>
+            
+            
+            <div class="doc"><p>Returns the byte offset of the given index within the byte-seq-wrapper.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-read-form" class="source var-name" href="/src/vertigo/structs.clj">read-form</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ byte-seq idx]</div>
+            
+            
+            <div class="doc"><p>Returns an eval'able form for reading the struct off a byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-read-value" class="source var-name" href="/src/vertigo/structs.clj">read-value</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ byte-seq offset]</div>
+            
+            
+            <div class="doc"><p>Reads the value from a byte-seq at the given byte-offset.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-typed-struct" class="source var-name" href="/src/vertigo/structs.clj">typed-struct</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[name &amp; field+types]</div>
+            
+            
+            <div class="doc"><p>A data structure with explicit types, meant to sit atop a byte-seq.  Fields must be keys, and types must
+implement IFixedType.  For better error messages, all structs must be named.</p>
+
+<p>(typed-struct 'vec2 :x float32 :y float32)</p>
+
+<p>The resulting value implements IFixedType, and can be used within other typed-structs.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-unwrap-byte-seq" class="source var-name" href="/src/vertigo/structs.clj">unwrap-byte-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_]</div>
+            
+            
+            <div class="doc"><p>Returns the inner byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-wrap-byte-seq" class="source var-name" href="/src/vertigo/structs.clj">wrap-byte-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type byte-seq]</div><div class="usage">[type stride offset byte-seq]</div>
+            
+            
+            <div class="doc"><p>Treats the byte-seq as a sequence of the given type.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-write-form" class="source var-name" href="/src/vertigo/structs.clj">write-form</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ byte-seq idx val]</div>
+            
+            
+            <div class="doc"><p>Returns an eval'able form for writing the struct to a byte-seq.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-write-value" class="source var-name" href="/src/vertigo/structs.clj">write-value</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[_ byte-seq offset x]</div>
+            
+            
+            <div class="doc"><p>Writes the value to a byte-seq at the given byte offset.</p>
+</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </body>
+
+</html>
