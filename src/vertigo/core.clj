@@ -441,7 +441,6 @@
                           iterator-limits
                           (map #(when-not (number? %) (gensym "lmt__")) iterator-limits))}))))))
 
-;; todo: refactor this into to something not monstrous and terrifying
 (defn- iteration-form [seq-bindings value-bindings env body]
   (let [{:keys [over?] :as arguments} (iteration-arguments seq-bindings value-bindings env)]
     (if-not over?
