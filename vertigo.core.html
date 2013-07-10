@@ -9,20 +9,20 @@
   <body>
     <header>
       <div id="header">
-        <h1 class="project-title">Vertigo 0.1.0-SNAPSHOT API documentation</h1>
+        <h1 class="project-title">Vertigo 0.1.0 API documentation</h1>
       </div>
     </header>
     <navigation>
       <div id="namespaces" class="sidebar">
         <h3>Namespaces</h3>
         <ul class="ns-links">
-          <li class="ns-list"><a class="ns-link ns-name" href="vertigo.bytes.html">vertigo.bytes</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.core.html">vertigo.core</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.io.html">vertigo.io</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.structs.html">vertigo.structs</a></li>
+          <li class="ns-list"><a class="ns-link ns-name" href="vertigo.bytes.html">vertigo.bytes</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.core.html">vertigo.core</a></li><li class="ns-list"><a class="ns-link ns-name" href="vertigo.structs.html">vertigo.structs</a></li>
         </ul>
       </div>
       <div id="vars" class="sidebar">
         <h3>Public Vars</h3>
         <ul class="ns-var-links">
-          <li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-any%3F">any?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-doreduce">doreduce</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-every%3F">every?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in">get-in</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in%27">get-in'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-over">over</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21">set-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21%27">set-in!'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-sum">sum</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21">update-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21%27">update-in!'</a></li>
+          <li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-any%3F">any?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-doreduce">doreduce</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-every%3F">every?</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-flush">flush</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in">get-in</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-get-in%27">get-in'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-lazily-marshal-seq">lazily-marshal-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-marshal-seq">marshal-seq</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-over">over</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21">set-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-set-in%21%27">set-in!'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-sum">sum</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21">update-in!</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-update-in%21%27">update-in!'</a></li><li class="ns-var-list"><a class="ns-var-link ns-var-name" href="vertigo.core.html#var-wrap">wrap</a></li>
         </ul>
       </div>
     </navigation>
@@ -54,29 +54,49 @@
             
             <div class="doc"><p>A combination of <code>doseq</code> and <code>reduce</code>, this is a primitive for efficient batch operations over sequences.</p>
 
-<p><code>reduce-over</code> takes two binding forms, one for sequences that mirrors <code>doseq</code>, and a second for accumulators
-that mirrors <code>loop</code>.  If there is only one accumulator, the body must return the new value for the accumulator.
-If there are multiple accumulators, it must return a vector containing values for each.</p>
+<p><code>doreduce</code> takes two binding forms, one for sequences that mirrors <code>doseq</code>, and a second
+for accumulators that mirrors <code>loop</code>.  If there is only one accumulator, the body must
+return the new value for the accumulator.  If there are multiple accumulators, it must return
+a vector containing values for each.  This will not require actually allocating a vector,
+except for the final result.</p>
 
 <p>So we can easily calculate the sum of a sequence:</p>
 
-<p>  (reduce-over [x s] [sum 0]
-    (+ x sum))</p>
+<p>  `(doreduce [x s] [sum 0]
+     (+ x sum))`</p>
 
 <p>We can also sum together two sequences:</p>
 
-<p>  (reduce-over [x a, y b] [sum 0]
-    (+ x y sum))</p>
+<p>  `(doreduce [x a, y b] [sum 0]
+     (+ x y sum))`</p>
 
 <p>And we can also calculate the product and sum at the same time:</p>
 
-<p>  (reduce-over [x s] [sum 0, product 1]
-    [(+ x sum) (* x product)])</p>
+<p>  `(doreduce [x s] [sum 0, product 1]
+     [(+ x sum) (* x product)])`</p>
 
-<p>We can also iterate over particular fields or arrays within a sequence:</p>
+<p>We can also iterate over particular fields or arrays within a sequence, using the <code>over</code>
+syntax.  This is faster than passing in a sequence which has been called with <code>over</code>
+elsewhere, and should be used inline where possible:</p>
 
-<p>  (reduce-over [x (over s [_ :a :b])] [sum 0] 
-    (+ x sum)</p>
+<p>   `(doreduce [x (over s [_ :a :b])] [sum 0] 
+      (+ x sum)`</p>
+
+<p>Both the <code>:step</code> and <code>:limit</code> for iteration may be specified:</p>
+
+<pre><code>`(doreduce [x s, :step 3, :limit 10] [sum 0]
+   (+ x sum))`
+</code></pre>
+
+<p> This will only sum the <code>[0, 3, 6, 9]</code> indices.  If there are multiple iterators, the
+ values must be specified using <code>:steps</code> and <code>:limits</code>:</p>
+
+<pre><code>`(doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
+   (+ x sum))`
+</code></pre>
+
+<p> Limits and indices that are out of bounds will throw an exception at either compile or
+ runtime, depending on when they can be resolved to a number.</p>
 </div>
           </div><div class="public">
             <h3><a id="var-every%3F" class="source var-name" href="/src/vertigo/core.clj">every?</a></h3>
@@ -91,6 +111,14 @@ If there are multiple accumulators, it must return a vector containing values fo
 <p>or</p>
 
 <p>  (every? [x s, :limit 10] (even? x))</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-flush" class="source var-name" href="/src/vertigo/core.clj">flush</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[x]</div>
+            
+            
+            <div class="doc"><p>If necessary, flushes changes that have been made to the byte sequence.</p>
 </div>
           </div><div class="public">
             <h3><a id="var-get-in" class="source var-name" href="/src/vertigo/core.clj">get-in</a></h3>
@@ -110,6 +138,22 @@ which allows for compile-time calculation of the offset, and validation of the l
             <div class="doc"><p>An unsafe version of <code>vertigo.core/get-in</code> which doesn't do runtime index checking.</p>
 </div>
           </div><div class="public">
+            <h3><a id="var-lazily-marshal-seq" class="source var-name" href="/src/vertigo/core.clj">lazily-marshal-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type s]</div><div class="usage">[type s {:keys [chunk-size direct?], :or {chunk-size 65536}}]</div>
+            
+            
+            <div class="doc"><p>Lazily converts a sequence into a marshaled version of itself.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-marshal-seq" class="source var-name" href="/src/vertigo/core.clj">marshal-seq</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type s]</div><div class="usage">[type s {:keys [direct?], :or {direct? true}}]</div>
+            
+            
+            <div class="doc"><p>Converts a sequence into a marshaled version of itself.</p>
+</div>
+          </div><div class="public">
             <h3><a id="var-over" class="source var-name" href="/src/vertigo/core.clj">over</a></h3>
             <h4 class="var-type macro" id="var-type">macro</h4>
             <div class="usage">[s fields]</div>
@@ -121,19 +165,19 @@ either '_' or a symbol prefixed with '?' to select all indices in that position.
 
 <p>Take a 2x2 matrix of integers counting up from 0 to 3:</p>
 
-<p>  ((0 1) (2 3))</p>
+<p>  <code>((0 1) (2 3))</code></p>
 
 <p>We get a flattened view of all integers within the matrix by marking both indices as free:</p>
 
-<p>  (over s [_ _]) =&gt; (0 1 2 3)</p>
+<p>  <code>(over s [_ _])</code> =&gt; <code>(0 1 2 3)</code></p>
 
 <p>However, we can also iterate over only the elements in the first array:</p>
 
-<p>  (over s [0 _]) =&gt; (0 1)</p>
+<p>  <code>(over s [0 _])</code> =&gt; <code>(0 1)</code></p>
 
 <p>Or only the first elements of all arrays:</p>
 
-<p>  (over s [_ 0]) =&gt; (0 2)</p>
+<p>  <code>(over s [_ 0])</code> =&gt; <code>(0 2)</code></p>
 
 <p>This syntax can be used in <code>doreduce</code> blocks to specify what subset to iterate over.</p>
 </div>
@@ -184,6 +228,22 @@ which allows for compile-time calculation of the offset, and validation of the l
             
             
             <div class="doc"><p>An unsafe version of <code>update-in!</code> which doesn't do runtime index checking.</p>
+</div>
+          </div><div class="public">
+            <h3><a id="var-wrap" class="source var-name" href="/src/vertigo/core.clj">wrap</a></h3>
+            <h4 class="var-type fn" id="var-type">fn</h4>
+            <div class="usage">[type x]</div><div class="usage">[type x {:keys [direct? chunk-size writable?], :or {direct? false, chunk-size (if (string? x) (int 2.0E9) (int 1000000.0)), writable? true}, :as options}]</div>
+            
+            
+            <div class="doc"><p>Wraps <code>x</code>, treating it as a sequence of <code>type</code>.  If <code>x</code> is a string, it will be treated
+as a filename.  If <code>x</code> can be converted to a ByteBuffer without any copying (byte-arrays,
+files, etc.), this is an O(1) operation.</p>
+
+<p>This will behave like a normal, immutable sequence of data, unless <code>set-in!</code> or <code>update-in!</code>
+are used.  It can be used with <code>doreduce</code> for efficient iteration or reduction.</p>
+
+<p>This returns an object that plays well with <code>byte-streams/to-*</code>, so the inverse operation is
+simply <code>byte-streams/to-byte-buffer</code>.</p>
 </div>
           </div>
         </div>
