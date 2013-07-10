@@ -5,7 +5,7 @@ Full documentation can be found [here](http://ideolalia.com/vertigo).
 ### usage
 
 ```clj
-[vertigo "0.1.0-SNAPSHOT"]
+[vertigo "0.1.0"]
 ```
 
 ### defining a type
