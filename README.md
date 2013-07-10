@@ -1,4 +1,4 @@
-Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.  While by default all indices are checked, this can be turned off, giving performance marginally faster than Java arrays on a wide variety of datatypes.
+Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.  With certain safety checks turned off, this yields performance somewhat faster than Java arrays on a much wider variety of datatypes.
 
 Full documentation can be found [here](http://ideolalia.com/vertigo).
 
@@ -191,7 +191,7 @@ Common use cases are exposed as `vertigo.core/sum`, `every?`, and `any?`.
 
 ### turning off bounds checks
 
-By default, every index is checked at compile time if possible, and runtime if necessary.  However, if your access patterns are predictable and no runtime exceptions are thrown, you can turn off bounds checking by adding `-Dvertigo.unsafe` as a command-line parameter.  When this is enabled, `(vertigo.core/sum s)` is ~10% faster than the equivalent operation using Clojure's `areduce`.
+By default, every index is checked at compile time if possible, and runtime if necessary.  However, if your access patterns are predictable and no runtime exceptions are thrown, you can turn off bounds checking by adding `-Dvertigo.unsafe` as a command-line parameter.  When this is enabled, `(vertigo.core/sum s)` is ~10% faster than the equivalent operation using Clojure's `areduce`, and ~10x faster than `(reduce + array)`.
 
 ### when to use vertigo
 
