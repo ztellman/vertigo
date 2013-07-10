@@ -6,8 +6,7 @@
     [vertigo.core :as c]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p]
-    [vertigo.structs :as s]
-    [vertigo.io :as io]))
+    [vertigo.structs :as s]))
 
 (def primitives
   [s/int8
@@ -42,9 +41,9 @@
     (let [s (if (re-find #"float" (name typ))
               (map double (range 10))
               (range 10))]
-      (is (= s (io/marshal-seq typ s)))
-      (is (= s (io/lazily-marshal-seq typ s)))
-      (is (= s (io/lazily-marshal-seq typ s {:chunk-size 32}))))))
+      (is (= s (c/marshal-seq typ s)))
+      (is (= s (c/lazily-marshal-seq typ s)))
+      (is (= s (c/lazily-marshal-seq typ s {:chunk-size 32}))))))
 
 (s/def-typed-struct tuple
   :x s/int32
@@ -55,7 +54,7 @@
             #(hash-map :x %1 :y %2)
             (range 10)
             (repeat 10 (range 10)))
-        ^:tuple ms (io/marshal-seq tuple s)]
+        ^:tuple ms (c/marshal-seq tuple s)]
       
     (is (= s ms))
     (is (= 0
@@ -83,7 +82,7 @@
             #(hash-map :x %1 :y %2)
             (range 1)
             (repeat 1 (range 10)))
-        ^:tuple ms (io/marshal-seq tuple s)
+        ^:tuple ms (c/marshal-seq tuple s)
         n 0]
 
     (c/update-in! ms [0 :x] p/inc)
@@ -106,39 +105,39 @@
   (let [s (long-array 1e6)]
     (bench "reduce array"
       (reduce max s)))
-  (let [s (io/marshal-seq s/int64 (range 1e6))]
+  (let [s (c/marshal-seq s/int64 (range 1e6))]
     (bench "reduce int64 byte-seq"
       (reduce max s)))
-  (let [s (io/marshal-seq s/int32 (range 1e6))]
+  (let [s (c/marshal-seq s/int32 (range 1e6))]
     (bench "reduce int32 byte-seq"
       (reduce max s))))
 
 (deftest ^:benchmark benchmark-marshalling
   (let [s (vec (range 10))]
     (bench "marshal 10 bytes"
-      (io/marshal-seq s/int8 s)))
+      (c/marshal-seq s/int8 s)))
   (let [s (vec (range 100))]
     (bench "marshal 100 bytes"
-      (io/marshal-seq s/int8 s)))
+      (c/marshal-seq s/int8 s)))
   (let [s (vec (range 1000))]
     (bench "marshal 1000 shorts"
-      (io/marshal-seq s/int16 s)))
+      (c/marshal-seq s/int16 s)))
   (let [s (range 10)]
     (bench "lazily marshal 10 bytes"
-      (io/marshal-seq s/int8 s)))
+      (c/marshal-seq s/int8 s)))
   (let [s (range 100)]
     (bench "lazily marshal 100 bytes"
-      (io/lazily-marshal-seq s/int8 s)))
+      (c/lazily-marshal-seq s/int8 s)))
   (let [s (range 1000)]
     (bench "lazily marshal 1000 shorts"
-      (io/lazily-marshal-seq s/int16 s))))
+      (c/lazily-marshal-seq s/int16 s))))
 
 (deftest ^:benchmark benchmark-accessors
   (let [s (map
             #(hash-map :x %1 :y %2)
             (range 1)
             (repeat 1 (range 10)))
-        ^:tuple ms (io/marshal-seq tuple s)]
+        ^:tuple ms (c/marshal-seq tuple s)]
 
     (batch-bench "mutable update nested structure"
       (c/update-in! ms [0 :y 0] p/inc))

@@ -32,12 +32,11 @@
     "Returns an eval'able form for writing the struct to a byte-seq."))
 
 (definterface+ IByteSeqWrapper
-  (unwrap-byte-seq [_]
-    "Returns the inner byte-seq.")
+  (unwrap-byte-seq [_])
   (index-offset ^long [_ ^long idx]
     "Returns the byte offset of the given index within the byte-seq-wrapper.")
   (element-type ^IFixedType [_]
-    "Returns the type of the elements within the seq."))
+    "Returns the type of the elements within the byte-seq-wrapper."))
 
 ;;;
 
@@ -75,7 +74,7 @@
           `(let [[read-form# write-form# rev-form#] ~read-write-rev]
 
              ;; basic primitive
-             (def ~name
+             (def ~(with-meta name {:doc "A primitive type."})
                (reify
                  clojure.lang.Named
                  (getName [_#] ~(str name))
@@ -104,7 +103,7 @@
           (eval
             (unify-gensyms
               `(let [[read-form# write-form# rev-form#] ~read-write-rev]
-                 (def ~name
+                 (def ~(with-meta name {:doc "A primitive type."})
                    (reify
                      clojure.lang.Named
                      (getName [_#] ~(str name))
@@ -141,12 +140,12 @@
 (def ^:dynamic *types*)
 
 (defn typed-struct
-  "A data structure with explicit types, meant to sit atop a byte-seq.  Fields must be keys, and types must
-   implement IFixedType.  For better error messages, all structs must be named.
+  "A data structure with explicit types, meant to sit atop a byte-seq.  Fields must be keys,
+   and types must implement `IFixedType`.  For better error messages, all structs must be named.
 
-   (typed-struct 'vec2 :x float32 :y float32)
+   `(typed-struct 'vec2 :x float32 :y float32)`
 
-   The resulting value implements IFixedType, and can be used within other typed-structs."
+   The resulting value implements `IFixedType`, and can be used within other typed-structs."
   [name & field+types]
 
   (assert (even? (count field+types)))

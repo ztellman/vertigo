@@ -1,22 +1,116 @@
 (ns vertigo.core
   (:refer-clojure
-    :exclude [get-in every?])
+    :exclude [get-in every? flush])
   (:use
     potemkin
     [potemkin.walk :only (prewalk)])
   (:require
     [byte-streams :as bytes]
-    [vertigo.io :as io]
     [vertigo.structs :as s]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p])
   (:import
+    [java.io
+     File]
+    [java.nio
+     MappedByteBuffer]
     [clojure.lang
      Compiler$LocalBinding]
     [vertigo.structs
      IFixedType
      IFixedInlinedType
      IFixedCompoundType]))
+
+;;;
+
+(defn flush
+  "If necessary, flushes changes that have been made to the byte sequence."
+  [x]
+  (let [byte-seq (s/unwrap-byte-seq x)]
+    (when-let [flush-fn (b/flush-fn byte-seq)]
+      (flush-fn byte-seq))))
+
+(defn- safe-chunk-size [type ^long chunk-size]
+  (p/* (s/byte-size type) (p/div chunk-size (s/byte-size type))))
+
+(defn wrap
+  "Wraps `x`, treating it as a sequence of `type`.  If `x` is a string, it will be treated
+   as a filename.  If `x` can be converted to a ByteBuffer without any copying (byte-arrays,
+   files, etc.), this is an O(1) operation.
+
+   This will behave like a normal, immutable sequence of data, unless `set-in!` or `update-in!`
+   are used.  It can be used with `doreduce` for efficient iteration or reduction.
+
+   This returns an object that plays well with `byte-streams/to-*`, so the inverse operation is
+   simply `byte-streams/to-byte-buffer`."
+  ([type x]
+     (wrap type bytes nil))
+  ([type x
+    {:keys [direct? chunk-size writable?]
+     :or {direct? false
+          chunk-size (if (string? x)
+                       (int 2e9)
+                       (int 1e6))
+          writable? true}
+     :as options}]
+     (let [x' (if (string? x) (File. ^String x) x)
+           chunk-size (safe-chunk-size type chunk-size)]
+       (let [bufs (bytes/to-byte-buffers x' options)]
+         (s/wrap-byte-seq type
+           (if (empty? (rest bufs))
+             (b/byte-seq (first bufs))
+             (b/to-chunked-byte-seq bufs))
+           (when (satisfies? bytes/Closeable bufs)
+             (fn [] (bytes/close bufs)))
+           (when (or (instance? File x) (string? x))
+             (fn [] (map #(.force ^MappedByteBuffer %) bufs))))))))
+
+(defn marshal-seq
+  "Converts a sequence into a marshaled version of itself."
+  ([type s]
+     (marshal-seq type s nil))
+  ([type s {:keys [direct?] :or {direct? true}}]
+     (let [cnt (count s)
+           stride (s/byte-size type)
+           allocate (if direct? b/direct-buffer b/buffer)
+           byte-seq (-> (long cnt) (p/* (long stride)) allocate b/byte-seq)]
+       (loop [offset 0, s s]
+         (when-not (empty? s)
+           (s/write-value type byte-seq offset (first s))
+           (recur (p/+ offset stride) (rest s))))
+       (s/wrap-byte-seq type byte-seq))))
+
+(defn lazily-marshal-seq
+  "Lazily converts a sequence into a marshaled version of itself."
+  ([type s]
+     (lazily-marshal-seq type s nil))
+  ([type s {:keys [chunk-size direct?] :or {chunk-size 65536}}]
+     (let [chunk-size (long (safe-chunk-size type chunk-size))
+           allocate (if direct? b/direct-buffer b/buffer)
+           stride (s/byte-size type)
+           populate (fn populate [s]
+                      (when-not (empty? s)
+                        (let [remaining (promise)
+                              nxt (delay (populate @remaining))
+                              byte-seq (-> chunk-size allocate (b/chunked-byte-seq nxt))]
+                          (loop [idx 0, offset 0, s s]
+                            (cond
+
+                              (empty? s)
+                              (do
+                                (deliver remaining nil)
+                                (b/slice byte-seq 0 offset))
+
+                              (p/== chunk-size offset)
+                              (do
+                                (deliver remaining s)
+                                byte-seq)
+
+                              :else
+                              (do
+                                (s/write-value type byte-seq offset (first s))
+                                (recur (p/inc idx) (p/+ offset stride) (rest s))))))))]
+       (s/wrap-byte-seq type (populate s)))))
 
 ;;;
 
@@ -281,19 +375,19 @@
 
    Take a 2x2 matrix of integers counting up from 0 to 3:
 
-     ((0 1) (2 3))
+     `((0 1) (2 3))`
 
    We get a flattened view of all integers within the matrix by marking both indices as free:
 
-     (over s [_ _]) => (0 1 2 3)
+     `(over s [_ _])` => `(0 1 2 3)`
 
    However, we can also iterate over only the elements in the first array:
 
-     (over s [0 _]) => (0 1)
+     `(over s [0 _])` => `(0 1)`
 
    Or only the first elements of all arrays:
 
-     (over s [_ 0]) => (0 2)
+     `(over s [_ 0])` => `(0 2)`
 
    This syntax can be used in `doreduce` blocks to specify what subset to iterate over."
   [s fields]
@@ -335,7 +429,7 @@
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
 
-(defn iteration-arguments [seq-bindings value-bindings env]
+(defn- iteration-arguments [seq-bindings value-bindings env]
   (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
         seq-bindings (take-while (complement keyword?) seq-bindings)
         elements (->> seq-bindings (partition 2) (map first))
@@ -362,7 +456,8 @@
 
       (merge arguments
         {:step (long (get seq-options :step 1))
-         :limit (get seq-options :limit `(long (.count ~(with-meta (first seqs) {:tag "clojure.lang.Counted"}))))})
+         :limit (get seq-options :limit)
+         :count-expr `(long (.count ~(with-meta (first seqs) {:tag "clojure.lang.Counted"})))})
 
       (let [fields (map last seqs)
             seqs (map second seqs)
@@ -446,18 +541,24 @@
     (if-not over?
 
       ;; normal linear iteration
-      (let [{:keys [step limit values seqs]} arguments]
+      (let [{:keys [step limit count-expr values seqs]} arguments]
         (unify-gensyms
           `(let [~@(mapcat
                      (fn [{:keys [sym expr]}]
                        (list (with-element-type sym expr env) expr))
                      seqs)
-                 limit# ~limit]
+                 limit## ~(or limit count-expr)]
+
+             ~@(when (and (not b/use-unsafe?) limit)
+                 `((let [cnt# ~count-expr]
+                     (when (>= limit## cnt#)
+                       (throw (IndexOutOfBoundsException. (str cnt#)))))))
+             
              (loop [idx## 0, ~@(mapcat
                                  (fn [{:keys [initial sym]}]
                                    [sym initial])
                                  values)]
-               (if (< idx## limit#)
+               (if (< idx## limit##)
                  (let [~@(mapcat
                            (fn [{:keys [sym element]}]
                              [element `(get-in' ~sym [idx##])])
@@ -516,14 +617,6 @@
 
         (unify-gensyms
           `(do
-             ~@(when-not b/use-unsafe?
-                 (->> limits
-                   (filter (fn [[sym lim]] (and (symbol? sym) (number? lim))))
-                   (remove #(free-variable? (first %)))
-                   (map (fn [[sym limit]]
-                          `(if (>= ~sym ~(long limit))
-                             (throw (IndexOutOfBoundsException.
-                                      (str ~(str sym) ": "(str ~sym)))))))))
              (let [~@(mapcat
                        (fn [{:keys [sym expr]}]
                          (list (with-element-type sym expr env) expr))
@@ -534,13 +627,27 @@
                         (when limit-sym
                           [limit-sym limit]))
                       (butlast iterators))]
-              (loop [~@(interleave (map :sym (butlast iterators)) (repeat 0))
-                     ~(:sym root-iterator) ~(- (:step root-iterator))
-                     ~@(mapcat
-                         (fn [{:keys [sym initial]}]
-                           [sym initial])
-                         values)]
-                (let [~(:sym root-iterator) (p/+ ~(:sym root-iterator) ~(:step root-iterator))
+
+               ;; make sure limits are valid
+               ~@(when-not b/use-unsafe?
+                   (->> limits
+                     (filter (fn [[sym lim]] (and (symbol? sym) (number? lim))))
+                     (remove #(free-variable? (first %)))
+                     (concat (->> iterators
+                               (filter #(and (:limit-sym %) (not= (:limit %) (:length %))))
+                               (map #(list (:limit-sym %) (:length %)))))
+                     (map (fn [[sym limit]]
+                            `(when (>= ~sym (long ~limit))
+                               (throw (IndexOutOfBoundsException.
+                                        (str ~(str sym) ": "(str ~sym)))))))))
+               
+               (loop [~@(interleave (map :sym (butlast iterators)) (repeat 0))
+                      ~(:sym root-iterator) ~(- (:step root-iterator))
+                      ~@(mapcat
+                          (fn [{:keys [sym initial]}]
+                            [sym initial])
+                          values)]
+                 (let [~(:sym root-iterator) (p/+ ~(:sym root-iterator) ~(:step root-iterator))
                       ~@(mapcat
                           (fn [[i j]]
                             `(~(:sym j)
@@ -564,29 +671,47 @@
 (defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.
 
-   `reduce-over` takes two binding forms, one for sequences that mirrors `doseq`, and a second for accumulators
-   that mirrors `loop`.  If there is only one accumulator, the body must return the new value for the accumulator.
-   If there are multiple accumulators, it must return a vector containing values for each.
+   `doreduce` takes two binding forms, one for sequences that mirrors `doseq`, and a second
+   for accumulators that mirrors `loop`.  If there is only one accumulator, the body must
+   return the new value for the accumulator.  If there are multiple accumulators, it must return
+   a vector containing values for each.  This will not require actually allocating a vector,
+   except for the final result.
 
    So we can easily calculate the sum of a sequence:
 
-     (reduce-over [x s] [sum 0]
-       (+ x sum))
+     `(doreduce [x s] [sum 0]
+        (+ x sum))`
 
    We can also sum together two sequences:
 
-     (reduce-over [x a, y b] [sum 0]
-       (+ x y sum))
+     `(doreduce [x a, y b] [sum 0]
+        (+ x y sum))`
 
    And we can also calculate the product and sum at the same time:
 
-     (reduce-over [x s] [sum 0, product 1]
-       [(+ x sum) (* x product)])
+     `(doreduce [x s] [sum 0, product 1]
+        [(+ x sum) (* x product)])`
 
-   We can also iterate over particular fields or arrays within a sequence:
+   We can also iterate over particular fields or arrays within a sequence, using the `over`
+   syntax.  This is faster than passing in a sequence which has been called with `over`
+   elsewhere, and should be used inline where possible:
 
-     (reduce-over [x (over s [_ :a :b])] [sum 0] 
-       (+ x sum)"
+      `(doreduce [x (over s [_ :a :b])] [sum 0] 
+         (+ x sum)`
+
+   Both the `:step` and `:limit` for iteration may be specified:
+
+       `(doreduce [x s, :step 3, :limit 10] [sum 0]
+          (+ x sum))`
+
+    This will only sum the `[0, 3, 6, 9]` indices.  If there are multiple iterators, the
+    values must be specified using `:steps` and `:limits`:
+
+       `(doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
+          (+ x sum))`
+
+    Limits and indices that are out of bounds will throw an exception at either compile or
+    runtime, depending on when they can be resolved to a number."
   [seq-bindings value-bindings & body]
   (iteration-form seq-bindings value-bindings &env body))
 

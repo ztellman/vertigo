@@ -6,13 +6,12 @@
     [vertigo.core :as c]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p]
-    [vertigo.structs :as s]
-    [vertigo.io :as io]))
+    [vertigo.structs :as s]))
 
 (def int-matrix (s/array s/int64 10 10))
 
 (def ^:int-matrix int64-matrices
-  (io/marshal-seq int-matrix
+  (c/marshal-seq int-matrix
     (->> (range 1e3)
       (partition 10)
       (partition 10))))
@@ -20,13 +19,13 @@
 (def array-dim 1e3)
 
 (def ^:s/int64 int64-array
-  (io/marshal-seq s/int64 (range array-dim)))
+  (c/marshal-seq s/int64 (range array-dim)))
 
 (def ^:s/int32 int32-array
-  (io/marshal-seq s/int32 (range array-dim)))
+  (c/marshal-seq s/int32 (range array-dim)))
 
 (def ^:s/int16 int16-array
-  (io/marshal-seq s/int16 (range array-dim)))
+  (c/marshal-seq s/int16 (range array-dim)))
 
 (deftest test-over
   (are [expected fields]
@@ -102,6 +101,10 @@
         (eval
           '(vertigo.core/doreduce [x (over int64-matrices [_ ?x _]) :limits {?x 11}] [sum 0]
              (+ x sum)))))
+  (is (thrown? IndexOutOfBoundsException
+        (let [n 11]
+          (vertigo.core/doreduce [x (over int64-matrices [_ ?x _]) :limits {?x n}] [sum 0]
+            (+ x sum)))))
   (is (thrown? IndexOutOfBoundsException
         (let [n 11]
           (c/doreduce [x (over int64-matrices [?x n _]) :limits {?x 2}] [sum 0]
