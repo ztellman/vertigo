@@ -1,4 +1,6 @@
-Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler.  With certain safety checks turned off, this yields performance somewhat faster than Java arrays on a much wider variety of datatypes.
+![](https://dl.dropboxusercontent.com/u/174179/vertigo/vertigo.png)
+
+Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler and more efficient.  With certain safety checks turned off, this yields performance a bit faster than Java arrays on a much wider variety of datatypes.
 
 Full documentation can be found [here](http://ideolalia.com/vertigo).
 
@@ -95,7 +97,7 @@ nil
 
 ### selecting sub-sequences
 
-Calling something like `map` on a marshaled sequence means that we can no longer use `vertigo.core/get-in`, `update-in!`, or any of the other special operators that only work on marshaled sequences.  This is mostly unavoidable, but in the specific case where we simply want to pull out a subset of the sequence, we can hold onto these properties using `(over s fields)`:
+Calling something like `map` on a Vertigo sequence means that we can no longer use `vertigo.core/get-in`, `update-in!`, or any of the other special operators that only work on Vertigo sequences.  This is mostly unavoidable, but in the specific case where we simply want to pull out a subset of the sequence, we can hold onto these properties using `(over s fields)`:
 
 ```clj
 > (require '[vertigo.structs :as s])
