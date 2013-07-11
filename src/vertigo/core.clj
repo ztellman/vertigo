@@ -375,19 +375,19 @@
 
    Take a 2x2 matrix of integers counting up from 0 to 3:
 
-     `((0 1) (2 3))`
+       ((0 1) (2 3))
 
    We get a flattened view of all integers within the matrix by marking both indices as free:
 
-     `(over s [_ _])` => `(0 1 2 3)`
+       (over s [_ _]) => (0 1 2 3)
 
    However, we can also iterate over only the elements in the first array:
 
-     `(over s [0 _])` => `(0 1)`
+       (over s [0 _]) => (0 1)
 
    Or only the first elements of all arrays:
 
-     `(over s [_ 0])` => `(0 2)`
+       (over s [_ 0]) => (0 2)
 
    This syntax can be used in `doreduce` blocks to specify what subset to iterate over."
   [s fields]
@@ -679,36 +679,36 @@
 
    So we can easily calculate the sum of a sequence:
 
-     `(doreduce [x s] [sum 0]
-        (+ x sum))`
+       (doreduce [x s] [sum 0]
+         (+ x sum))
 
    We can also sum together two sequences:
 
-     `(doreduce [x a, y b] [sum 0]
-        (+ x y sum))`
+       (doreduce [x a, y b] [sum 0]
+         (+ x y sum))
 
    And we can also calculate the product and sum at the same time:
 
-     `(doreduce [x s] [sum 0, product 1]
-        [(+ x sum) (* x product)])`
+       (doreduce [x s] [sum 0, product 1]
+         [(+ x sum) (* x product)])
 
    We can also iterate over particular fields or arrays within a sequence, using the `over`
    syntax.  This is faster than passing in a sequence which has been called with `over`
    elsewhere, and should be used inline where possible:
 
-      `(doreduce [x (over s [_ :a :b])] [sum 0] 
-         (+ x sum)`
+        (doreduce [x (over s [_ :a :b])] [sum 0] 
+          (+ x sum)
 
    Both the `:step` and `:limit` for iteration may be specified:
 
-       `(doreduce [x s, :step 3, :limit 10] [sum 0]
-          (+ x sum))`
+         (doreduce [x s, :step 3, :limit 10] [sum 0]
+           (+ x sum))
 
     This will only sum the `[0, 3, 6, 9]` indices.  If there are multiple iterators, the
     values must be specified using `:steps` and `:limits`:
 
-       `(doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
-          (+ x sum))`
+         (doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
+           (+ x sum))
 
     Limits and indices that are out of bounds will throw an exception at either compile or
     runtime, depending on when they can be resolved to a number."
@@ -720,11 +720,11 @@
 (defmacro sum
   "Returns the sum of all numbers within the sequence.
 
-     (sum s)
+       (sum s)
 
    or
 
-     (sum s :step 2, :limit 10)"
+       (sum s :step 2, :limit 10)"
   [s & options]
   `(doreduce [x# ~s ~@options] [sum# 0]
      (p/+ x# sum#)))
@@ -732,11 +732,11 @@
 (defmacro every?
   "Returns true if `pred-expr` returns true for all `x` in `s`.
 
-     (every? [x s] (pos? x))
+       (every? [x s] (pos? x))
 
    or
 
-     (every? [x s, :limit 10] (even? x))"
+       (every? [x s, :limit 10] (even? x))"
   [[x s & options] pred-expr]
   `(doreduce [~x ~s ~@options] [bool# true]
      (if ~pred-expr
@@ -746,11 +746,11 @@
 (defmacro any?
   "Returns true if `pred-expr` returns true for some `x` in `s`.
 
-     (any? [x s] (zero? x))
+       (any? [x s] (zero? x))
 
    or
 
-     (any? [x s, :step 42] (neg? x))"
+       (any? [x s, :step 42] (neg? x))"
   [[x s & options] pred-expr]
   `(doreduce [~x ~s ~@options] [bool# false]
      (if ~pred-expr
