@@ -9,7 +9,7 @@
   <body>
     <header>
       <div id="header">
-        <h1 class="project-title">Vertigo 0.1.0 API documentation</h1>
+        <h1 class="project-title">Vertigo 0.1.1-SNAPSHOT API documentation</h1>
       </div>
     </header>
     <navigation>
@@ -40,11 +40,13 @@
             
             <div class="doc"><p>Returns true if <code>pred-expr</code> returns true for some <code>x</code> in <code>s</code>.</p>
 
-<p>  (any? [x s] (zero? x))</p>
+<pre><code>(any? [x s] (zero? x))
+</code></pre>
 
 <p>or</p>
 
-<p>  (any? [x s, :step 42] (neg? x))</p>
+<pre><code>(any? [x s, :step 42] (neg? x))
+</code></pre>
 </div>
           </div><div class="public">
             <h3><a id="var-doreduce" class="source var-name" href="/src/vertigo/core.clj">doreduce</a></h3>
@@ -62,37 +64,41 @@ except for the final result.</p>
 
 <p>So we can easily calculate the sum of a sequence:</p>
 
-<p>  `(doreduce [x s] [sum 0]
-     (+ x sum))`</p>
+<pre><code>(doreduce [x s] [sum 0]
+  (+ x sum))
+</code></pre>
 
 <p>We can also sum together two sequences:</p>
 
-<p>  `(doreduce [x a, y b] [sum 0]
-     (+ x y sum))`</p>
+<pre><code>(doreduce [x a, y b] [sum 0]
+  (+ x y sum))
+</code></pre>
 
 <p>And we can also calculate the product and sum at the same time:</p>
 
-<p>  `(doreduce [x s] [sum 0, product 1]
-     [(+ x sum) (* x product)])`</p>
+<pre><code>(doreduce [x s] [sum 0, product 1]
+  [(+ x sum) (* x product)])
+</code></pre>
 
 <p>We can also iterate over particular fields or arrays within a sequence, using the <code>over</code>
 syntax.  This is faster than passing in a sequence which has been called with <code>over</code>
 elsewhere, and should be used inline where possible:</p>
 
-<p>   `(doreduce [x (over s [_ :a :b])] [sum 0] 
-      (+ x sum)`</p>
+<pre><code> (doreduce [x (over s [_ :a :b])] [sum 0] 
+   (+ x sum)
+</code></pre>
 
 <p>Both the <code>:step</code> and <code>:limit</code> for iteration may be specified:</p>
 
-<pre><code>`(doreduce [x s, :step 3, :limit 10] [sum 0]
-   (+ x sum))`
+<pre><code>  (doreduce [x s, :step 3, :limit 10] [sum 0]
+    (+ x sum))
 </code></pre>
 
 <p> This will only sum the <code>[0, 3, 6, 9]</code> indices.  If there are multiple iterators, the
  values must be specified using <code>:steps</code> and <code>:limits</code>:</p>
 
-<pre><code>`(doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
-   (+ x sum))`
+<pre><code>  (doreduce [x (over s [?i 0 ?j]), :steps {?i 2}, :limits {?j 20}] [sum 0]
+    (+ x sum))
 </code></pre>
 
 <p> Limits and indices that are out of bounds will throw an exception at either compile or
@@ -106,11 +112,13 @@ elsewhere, and should be used inline where possible:</p>
             
             <div class="doc"><p>Returns true if <code>pred-expr</code> returns true for all <code>x</code> in <code>s</code>.</p>
 
-<p>  (every? [x s] (pos? x))</p>
+<pre><code>(every? [x s] (pos? x))
+</code></pre>
 
 <p>or</p>
 
-<p>  (every? [x s, :limit 10] (even? x))</p>
+<pre><code>(every? [x s, :limit 10] (even? x))
+</code></pre>
 </div>
           </div><div class="public">
             <h3><a id="var-flush" class="source var-name" href="/src/vertigo/core.clj">flush</a></h3>
@@ -165,19 +173,23 @@ either '_' or a symbol prefixed with '?' to select all indices in that position.
 
 <p>Take a 2x2 matrix of integers counting up from 0 to 3:</p>
 
-<p>  <code>((0 1) (2 3))</code></p>
+<pre><code>((0 1) (2 3))
+</code></pre>
 
 <p>We get a flattened view of all integers within the matrix by marking both indices as free:</p>
 
-<p>  <code>(over s [_ _])</code> =&gt; <code>(0 1 2 3)</code></p>
+<pre><code>(over s [_ _]) =&gt; (0 1 2 3)
+</code></pre>
 
 <p>However, we can also iterate over only the elements in the first array:</p>
 
-<p>  <code>(over s [0 _])</code> =&gt; <code>(0 1)</code></p>
+<pre><code>(over s [0 _]) =&gt; (0 1)
+</code></pre>
 
 <p>Or only the first elements of all arrays:</p>
 
-<p>  <code>(over s [_ 0])</code> =&gt; <code>(0 2)</code></p>
+<pre><code>(over s [_ 0]) =&gt; (0 2)
+</code></pre>
 
 <p>This syntax can be used in <code>doreduce</code> blocks to specify what subset to iterate over.</p>
 </div>
@@ -206,11 +218,13 @@ which allows for compile-time calculation of the offset, and validation of the l
             
             <div class="doc"><p>Returns the sum of all numbers within the sequence.</p>
 
-<p>  (sum s)</p>
+<pre><code>(sum s)
+</code></pre>
 
 <p>or</p>
 
-<p>  (sum s :step 2, :limit 10)</p>
+<pre><code>(sum s :step 2, :limit 10)
+</code></pre>
 </div>
           </div><div class="public">
             <h3><a id="var-update-in%21" class="source var-name" href="/src/vertigo/core.clj">update-in!</a></h3>
