@@ -65,7 +65,7 @@ While the marshaled seq is outwardly identical, under the covers it is just a th
 
 Using `marshal-seq` will realize and copy over the entire sequence at once.  For large or unbounded sequences, `lazily-marshal-seq` is preferred.  While the performance characteristics of the two methods may differ, the resulting seq is otherwise the same.
 
-To create a sequence that wraps an already encoded source of bytes, you may use `vertigo.io/wrap-input-stream`, `vertigo.io/wrap-buffer`, et al.
+To create a sequence that wraps an already encoded source of bytes, you may use `vertigo.core/wrap`.  Vertigo seqs created via `wrap` or `marshal-seq` can be turned back into bytes using `byte-streams/to-*` from the [byte-streams](https://github.com/ztellman/byte-streams) library.
 
 ### interacting with a sequence
 
