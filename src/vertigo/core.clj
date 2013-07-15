@@ -44,7 +44,7 @@
    This returns an object that plays well with `byte-streams/to-*`, so the inverse operation is
    simply `byte-streams/to-byte-buffer`."
   ([type x]
-     (wrap type bytes nil))
+     (wrap type x nil))
   ([type x
     {:keys [direct? chunk-size writable?]
      :or {direct? false
@@ -54,16 +54,23 @@
           writable? true}
      :as options}]
      (let [x' (if (string? x) (File. ^String x) x)
-           chunk-size (safe-chunk-size type chunk-size)]
-       (let [bufs (bytes/to-byte-buffers x' options)]
-         (s/wrap-byte-seq type
-           (if (empty? (rest bufs))
-             (b/byte-seq (first bufs))
-             (b/to-chunked-byte-seq bufs))
-           (when (satisfies? bytes/Closeable bufs)
-             (fn [] (bytes/close bufs)))
-           (when (or (instance? File x) (string? x))
-             (fn [] (map #(.force ^MappedByteBuffer %) bufs))))))))
+           chunk-size (safe-chunk-size type chunk-size)
+           bufs (bytes/to-byte-buffers x' options)
+           close-fn (when (satisfies? bytes/Closeable bufs)
+                      (fn [] (bytes/close bufs)))
+           flush-fn (when (or (instance? File x) (string? x))
+                      (fn [] (map #(.force ^MappedByteBuffer %) bufs)))]
+       (s/wrap-byte-seq type
+         (if (empty? (rest bufs))
+           (b/byte-seq (first bufs) close-fn flush-fn)
+           (let [f (fn this [bufs]
+                     (when-not (empty? bufs)
+                       (b/chunked-byte-seq
+                         (first bufs)
+                         (delay (this (rest bufs)))
+                         close-fn
+                         flush-fn)))]
+             (f bufs)))))))
 
 (defn marshal-seq
   "Converts a sequence into a marshaled version of itself."

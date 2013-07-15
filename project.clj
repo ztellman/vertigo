@@ -4,7 +4,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[potemkin "0.3.1"]
                  [primitive-math "0.1.2"]
-                 [byte-streams "0.1.1"]]
+                 [byte-streams "0.1.3-SNAPSHOT"]]
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
                                   [org.clojure/clojure "1.5.1"]
                                   [codox-md "0.2.0" :exclusions [org.clojure/clojure]]]}

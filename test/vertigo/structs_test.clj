@@ -3,6 +3,7 @@
     clojure.test
     vertigo.test-utils)
   (:require
+    [byte-streams :as bytes]
     [vertigo.core :as c]
     [vertigo.bytes :as b]
     [vertigo.primitives :as p]
@@ -44,6 +45,20 @@
       (is (= s (c/marshal-seq typ s)))
       (is (= s (c/lazily-marshal-seq typ s)))
       (is (= s (c/lazily-marshal-seq typ s {:chunk-size 32}))))))
+
+(defn temp-file []
+  (doto (java.io.File/createTempFile "vertigo" ".tmp")
+    (.deleteOnExit)))
+
+(deftest test-format-roundtrips
+  (let [s (c/marshal-seq s/int64 (range 1e5))]
+    (is (= s (->> s bytes/to-byte-buffer (c/wrap s/int64))))
+    (is (= s (->> s bytes/to-readable-channel (c/wrap s/int64)))))
+
+  (let [f (temp-file)
+        s (c/marshal-seq s/int64 (range 1e5))]
+    (bytes/transfer s f)
+    (is (= s (c/wrap s/int64 f)))))
 
 (s/def-typed-struct tuple
   :x s/int32
