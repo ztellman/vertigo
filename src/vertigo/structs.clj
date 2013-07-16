@@ -31,6 +31,10 @@
   (write-form [_ byte-seq idx val]
     "Returns an eval'able form for writing the struct to a byte-seq."))
 
+;; a utility interface for byte-streams integrations
+(definterface+ IByteRange
+  (underlying-bytes [_]))
+
 (definterface+ IByteSeqWrapper
   (unwrap-byte-seq [_])
   (index-offset ^long [_ ^long idx]
@@ -203,6 +207,10 @@
 
                      ;; map structure that sits atop a slice of the byte-seq
                      (reify-map-type
+                       IByteRange
+                       (underlying-bytes [_#]
+                         (bytes/to-byte-buffers byte-seq##))
+                       
                        (~'keys [_#]
                          ~(vec fields))
                        (~'get [_# k# default-value#]
@@ -247,7 +255,7 @@
   (close [_]
     (when-let [close-fn (b/close-fn byte-seq)]
       (close-fn byte-seq)))
-  
+
   IByteSeqWrapper
   (unwrap-byte-seq [_] byte-seq)
   (element-type [_] type)
@@ -323,6 +331,10 @@
       (if subset?
         (b/cross-section byte-seq (.offset wrapper) byte-size (.stride wrapper))
         byte-seq))))
+
+(bytes/def-conversion [IByteRange (bytes/seq-of java.nio.ByteBuffer)]
+  [byte-range]
+  (underlying-bytes byte-range))
 
 ;;;
 
