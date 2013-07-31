@@ -69,15 +69,15 @@ To create a sequence that wraps an already encoded source of bytes, you may use 
 
 ### interacting with a sequence
 
-While we can use `first`, `rest`, `nth`, `get-in` and all the other normal Clojure functions on these sequences, we can also do something other data structures can't.  Consider the above example of a map containing sequences of ints and floats.  To get the fifth element under the `:floats` key, we call `(get-in s [:floats 4])`.  This will first get the sequence under the `:floats` key, and then look for the fifth element within the sequence.  
+While we can use `first`, `rest`, `nth`, `get-in` and all the other normal Clojure functions on these sequences, we can also do something other data structures can't.  Consider the above example of a map containing sequences of ints and floats.  To get the fifth element under the `:floats` key, we call `(get-in s [:floats 4])`.  This will first get the sequence under the `:floats` key, and then look for the fifth element within the sequence.
 
 However, in our data structure we're guaranteed to have a fixed layout, so _we know exactly where the data is already_.  We don't need to fetch all the intermediate data structures, we simply need to calculate the location and do a single read.  To do this, we use `vertigo.core/get-in`:
 
 ```clj
 > (def ^:int-and-floats s (v/marshal-seq ints-and-floats [x]))
 #'s
-> (v/get-in s [:floats 4])
-5
+> (v/get-in s [0 :floats 4])
+4.0
 ```
 
 Notice that we have hinted the sequence with the keyword `:ints-and-floats`.  To work with our compile-time `get-in`, all sequences must be hinted with their element type in this way.  In return, we get a read time that even for moderately nested structures can be several orders of magnitude faster.
@@ -133,7 +133,7 @@ Instead, Vertigo provides `doreduce`, a primitive that is a fusion of Clojure's 
 ```clj
 > (def ^:s/int64 s (marshal-seq s/int64 (repeat 100 1)))
 #'s
-> (doreduce [x s] [sum 0] 
+> (doreduce [x s] [sum 0]
     (+ sum x))
 100
 ```
@@ -146,7 +146,7 @@ Notice that `doreduce` takes two binding forms, one for sequences, and another f
 [100 1]
 ```
 
-Note that we're not actually allocating a new vector for each element, it's just sugar over a multi-value recursion.  
+Note that we're not actually allocating a new vector for each element, it's just sugar over a multi-value recursion.
 
 If we explicitly don't want to recur, we can use `break`:
 
