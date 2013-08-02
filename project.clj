@@ -3,7 +3,7 @@
   :license {:name "MIT Public License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[potemkin "0.3.1"]
-                 [primitive-math "0.1.2"]
+                 [primitive-math "0.1.3-SNAPSHOT"]
                  [byte-streams "0.1.3"]]
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
                                   [org.clojure/clojure "1.5.1"]
