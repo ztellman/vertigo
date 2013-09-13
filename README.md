@@ -1,4 +1,4 @@
-![](https://dl.dropboxusercontent.com/u/174179/vertigo/vertigo.png)
+![](docs/vertigo.png)
 
 Vertigo allows you to treat raw bytes like a normal Clojure data structure.  This allows for faster reads and reduced memory footprint, and can also make interop with C libraries significantly simpler and more efficient.  With certain safety checks turned off, this yields performance a bit faster than Java arrays on a much wider variety of datatypes.
 
