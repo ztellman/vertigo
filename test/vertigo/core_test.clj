@@ -93,6 +93,12 @@
   (is (= (reduce + (range 200))
         (c/doreduce [x (over int64-matrices [?x _ _]) :limits {?x 2}] [sum 0]
           (+ x sum))))
+  (is (= (* 2 (reduce + (range 200)))
+        (c/doreduce [x (over int64-matrices [?x _ _])
+                     y (over int64-matrices [?y _ _])
+                     :limits {?x 2, ?y 2}]
+          [sum 0]
+          (+ x y sum))))
   (is (= (->> (range 200) (partition 2) (map first) (reduce +))
         (c/doreduce [x (over int64-matrices [?x _ ?z]) :limits {?x 2} :steps {?z 2}] [sum 0]
           (+ x sum))))

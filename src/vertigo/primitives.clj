@@ -1,6 +1,6 @@
 (ns vertigo.primitives
   (:refer-clojure
-    :exclude [+ - * / inc dec rem == not== zero? <= >= < >])
+    :exclude [+ - * / inc dec rem == not== zero? <= >= < > min max])
   (:use
     potemkin)
   (:require
@@ -15,7 +15,7 @@
 
 (import-vars
   [primitive-math
-   use-primitive-operators + - * / div inc dec rem == not== zero? <= >= < >])
+   use-primitive-operators + - * / div inc dec rem == not== zero? <= >= < > min max])
 
 (defn ->int8
   "Converts any number, character, or first character of a string to an int8."

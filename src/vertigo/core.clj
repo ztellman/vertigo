@@ -2,9 +2,9 @@
   (:refer-clojure
     :exclude [get-in every? flush])
   (:use
-    potemkin
-    [potemkin.walk :only (prewalk)])
+    potemkin)
   (:require
+    [riddley.walk :as rd]
     [byte-streams :as bytes]
     [vertigo.structs :as s]
     [vertigo.bytes :as b]
@@ -218,7 +218,8 @@
         ;; the outermost boundaries of the lookup
         slice (when-not (zero? num-prefixed-lookups)
                 {:offset (collapse-exprs (take num-prefixed-lookups offsets))
-                 :length (s/byte-size (nth types num-prefixed-lookups))})
+                 :length (let [type (nth types num-prefixed-lookups)]
+                           (s/byte-size type))})
 
         contiguous-groups (fn contiguous-groups [pred s]
                             (let [s (drop-while (complement pred) s)]
@@ -508,7 +509,12 @@
             bounds (->> (mapcat (partial map vector) fields lengths)
                      (filter #(symbol? (first %)))
                      (map #(apply hash-map %))
-                     (apply merge-with min))
+                     (apply merge-with
+                       (fn [a b]
+                         (if (and (number? a) (number? b))
+                           (min a b)
+                           `(p/min ~a ~b)))))
+            
             limits (merge bounds
                      (if-let [limit (seq-options :limit)]
                        (if (= 1 (count iterators))
@@ -516,7 +522,7 @@
                          (throw (IllegalArgumentException.
                                   ":limit is ambiguous when there are multiple free variables.")))
                        (seq-options :limits)))]
-
+        
         (doseq [k (keys limits)]
           (when (and
                   (number? (limits k))
@@ -526,6 +532,7 @@
                      (str ":limit of " (limits k) " is greater than max value " (bounds k))))))
         
         (merge
+
           (update-in arguments [:seqs]
             (fn [seqs]
               (map
@@ -534,14 +541,19 @@
                    (update-in [:expr] second))
                 seqs
                 fields)))
+
           (let [iterator-limits (map #(get limits %) iterators)]
+
             {:limits limits
              :iterators (map #(zipmap [:sym :length :step :limit :limit-sym] %&)
                           iterators
                           (first lengths)
                           steps
                           iterator-limits
-                          (map #(when-not (number? %) (gensym "lmt__")) iterator-limits))}))))))
+                          (map
+                            #(when-not (or (number? %) (and (seq? %) (= `p/min (first %))))
+                               (gensym "lmt__"))
+                            iterator-limits))}))))))
 
 (defn- iteration-form [seq-bindings value-bindings env body]
   (let [{:keys [over?] :as arguments} (iteration-arguments seq-bindings value-bindings env)]
@@ -589,7 +601,7 @@
                           
                           :else
                           `(recur (p/+ idx## ~step) ~@x)))
-                      `(do ~@body)))
+                      (rd/macroexpand-all `(do ~@body))))
                  ~(if (= 1 (count values))
                     (:sym (first values))
                     `(vector ~@(map :sym values))))))))
@@ -619,7 +631,7 @@
                              
                            :else
                            `(recur ~@(map :sym iterators) ~@x)))
-                       `(do ~@body)))
+                       (rd/macroexpand-all `(do ~@body))))
             root-iterator (last iterators)]
 
         (unify-gensyms
