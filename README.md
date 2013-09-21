@@ -6,6 +6,8 @@ Full documentation can be found [here](http://ideolalia.com/vertigo).
 
 ### usage
 
+[![Build Status](https://travis-ci.org/ztellman/vertigo.png?branch=master)](https://travis-ci.org/ztellman/vertigo)
+
 ```clj
 [vertigo "0.1.1"]
 ```

@@ -4,6 +4,7 @@
   (:use
     potemkin)
   (:require
+    [clj-tuple :refer (tuple)]
     [riddley.walk :as rd]
     [byte-streams :as bytes]
     [vertigo.structs :as s]
@@ -589,7 +590,7 @@
                           (and (seq? x) (= 'break (first x)))
                           (if (= 2 (count x))
                             (second x)
-                            `(vector ~@(rest x)))
+                            `(tuple ~@(rest x)))
                           
                           (= 1 (count values))
                           `(recur (p/+ idx## ~step) ~x)
@@ -604,7 +605,7 @@
                       (rd/macroexpand-all `(do ~@body))))
                  ~(if (= 1 (count values))
                     (:sym (first values))
-                    `(vector ~@(map :sym values))))))))
+                    `(tuple ~@(map :sym values))))))))
 
       ;; multi-dimensional iteration
       (let [{:keys [seqs limits values iterators]} arguments
@@ -619,7 +620,7 @@
                            (and (seq? x) (= 'break (first x)))
                            (if (= 2 (count x))
                              (second x)
-                             `(vector ~@(rest x)))
+                             `(tuple ~@(rest x)))
                              
                            (= 1 (count values))
                            `(recur ~@(map :sym iterators) ~x)
@@ -685,7 +686,7 @@
                     ~body
                     ~(if (= 1 (count values))
                        (:sym (first values))
-                       `(vector ~@(map :sym values)))))))))))))
+                       `(tuple ~@(map :sym values)))))))))))))
 
 (defmacro doreduce
   "A combination of `doseq` and `reduce`, this is a primitive for efficient batch operations over sequences.

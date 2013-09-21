@@ -4,6 +4,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[potemkin "0.3.4-SNAPSHOT"]
                  [primitive-math "0.1.3"]
+                 [clj-tuple "0.1.2"]
                  [byte-streams "0.1.5"]
                  [riddley "0.1.5-SNAPSHOT"]]
   :profiles {:dev {:dependencies [[criterium "0.4.1"]
