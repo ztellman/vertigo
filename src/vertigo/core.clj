@@ -5,7 +5,8 @@
     potemkin)
   (:require
     [clj-tuple :refer (tuple)]
-    [riddley.walk :as rd]
+    [riddley.walk :as rw]
+    [riddley.compiler :as rc]
     [byte-streams :as bytes]
     [vertigo.structs :as s]
     [vertigo.bytes :as b]
@@ -438,6 +439,12 @@
         body   (drop (count header) x)]
     `(~@header ~@(map #(concat (butlast %) [(walk-return-exprs f x)]) body))))
 
+(defn- macroexpand-all [form elements values]
+  (rc/with-lexical-scoping
+    (doseq [x (concat elements values)]
+      (rc/register-local x nil))
+    (rw/macroexpand-all form)))
+
 (defn- iteration-arguments [seq-bindings value-bindings env]
   (let [seq-options (->> seq-bindings (drop-while (complement keyword?)) (apply hash-map))
         seq-bindings (take-while (complement keyword?) seq-bindings)
@@ -602,7 +609,12 @@
                           
                           :else
                           `(recur (p/+ idx## ~step) ~@x)))
-                      (rd/macroexpand-all `(do ~@body))))
+
+                      (macroexpand-all
+                        `(do ~@body)
+                        (map :element seqs)
+                        (map :sym values))))
+                 
                  ~(if (= 1 (count values))
                     (:sym (first values))
                     `(tuple ~@(map :sym values))))))))
@@ -632,7 +644,12 @@
                              
                            :else
                            `(recur ~@(map :sym iterators) ~@x)))
-                       (rd/macroexpand-all `(do ~@body))))
+
+                       (macroexpand-all
+                         `(do ~@body)
+                         (map :element seqs)
+                         (map :sym values))))
+            
             root-iterator (last iterators)]
 
         (unify-gensyms
