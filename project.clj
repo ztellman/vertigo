@@ -1,4 +1,4 @@
-(defproject vertigo "0.1.2-SNAPSHOT"
+(defproject vertigo "0.1.2"
   :description "peering down into the machine"
   :license {:name "MIT Public License"
             :url "http://opensource.org/licenses/MIT"}
