@@ -9,7 +9,7 @@ Full documentation can be found [here](http://ideolalia.com/vertigo).
 [![Build Status](https://travis-ci.org/ztellman/vertigo.png?branch=master)](https://travis-ci.org/ztellman/vertigo)
 
 ```clj
-[vertigo "0.1.2"]
+[vertigo "0.1.3"]
 ```
 
 ### defining a type
