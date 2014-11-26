@@ -70,7 +70,7 @@
             (range 10)
             (repeat 10 (range 10)))
         ^:tuple ms (c/marshal-seq tuple s)]
-      
+
     (is (= s ms))
     (is (= 0
           (c/get-in ms [0 :x])
@@ -83,16 +83,16 @@
     (is (thrown? IndexOutOfBoundsException
           (let [n 11]
             (prn (c/get-in ms [0 :y n])))))
-      
+
     (is (= (range 10)
           (c/get-in ms [0 :y])
           (get-in ms [0 :y])))
-      
+
     (is (= {:x 1 :y (range 10)}
           (c/get-in ms [1])
           (get-in ms [1])
           (nth ms 1))))
-  
+
   (let [s (map
             #(hash-map :x %1 :y %2)
             (range 1)

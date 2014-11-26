@@ -112,7 +112,7 @@
                      clojure.lang.Named
                      (getName [_#] ~(str name))
                      (getNamespace [_#] ~(str *ns*))
-                     
+
                      IFixedType
                      (byte-size [_#]
                        ~size)
@@ -153,7 +153,7 @@
   [name & field+types]
 
   (assert (even? (count field+types)))
-  
+
   (let [fields (->> field+types (partition 2) (map first))
         types (->> field+types (partition 2) (map second))]
 
@@ -162,7 +162,7 @@
     (doseq [[field type] (map list fields types)]
       (when-not (instance? IFixedType type)
         (throw (IllegalArgumentException. (str field " is not a valid type.")))))
-    
+
     (let [offsets (->> types (map byte-size) (cons 0) (reductions +) butlast)
           byte-size (->> types (map byte-size) (apply +))
           type-syms (map #(symbol (str "t" %)) (range (count types)))]
@@ -176,8 +176,8 @@
                          (range (count types))))]
                (reify
                  clojure.lang.Named
-                 (getName [_#] ~(str name))
-                 (getNamespace [_#] ~(namespace name))
+                 (~'getName [_#] ~(str name))
+                 (~'getNamespace [_#] ~(namespace name))
 
                  IFixedCompoundType
                  (has-field? [_# x#]
@@ -191,7 +191,7 @@
                      ~@(interleave
                          fields
                          type-syms)))
-                 
+
                  IFixedType
                  (byte-size [_#]
                    ~byte-size)
@@ -210,7 +210,7 @@
                        IByteRange
                        (underlying-bytes [_#]
                          (bytes/to-byte-buffers byte-seq##))
-                       
+
                        (~'keys [_#]
                          ~(vec fields))
                        (~'get [_# k# default-value#]
@@ -266,7 +266,7 @@
   clojure.lang.Sequential
   clojure.lang.Indexed
   clojure.lang.ILookup
-  
+
   (first [_]
     (read-value type byte-seq offset))
   (next [_]
@@ -307,11 +307,11 @@
         (read-value type byte-seq (p/+ offset (long idx))))
       f
       start))
-  
+
   proto/CollReduce
   (coll-reduce [this f start]
     (byte-seq-wrapper-reduce this f start))
-  
+
   (coll-reduce [this f]
     (byte-seq-wrapper-reduce this f)))
 

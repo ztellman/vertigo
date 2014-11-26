@@ -35,7 +35,7 @@
   (get-int64 ^long [_ ^long idx])
   (get-float32 ^double [_ ^long idx])
   (get-float64 ^double [_ ^long idx])
-  
+
   (put-int8 [_ ^long idx ^long val])
   (put-int16 [_ ^long idx ^long val])
   (put-int32 [_ ^long idx ^long val])
@@ -54,7 +54,7 @@
     "Returns the function, if it exists, that closes the underlying source of bytes.")
   (flush-fn [_]
     "Returns the function, if it exists, that flushes the underlying source of bytes.")
-  
+
   (byte-order [_]
     "Returns the java.nio.ByteOrder of the underlying buffer.")
   (set-byte-order! [_ order]
@@ -157,7 +157,7 @@
     close-fn)
   (flush-fn [_]
     flush-fn)
-  
+
   IByteSeq
   (get-int8 [this idx]     (long (.getByte unsafe (+ loc idx))))
   (get-int16 [this idx]    (long (.getShort unsafe (+ loc idx))))
@@ -247,7 +247,7 @@
     (ChunkedByteSeq. buffer (buf-size buffer) (delay this) close-fn flush-fn))
 
   IByteSeq
-  
+
   (get-int8 [this idx]     (long (doto-nth this buf chunk-size idx .get)))
   (get-int16 [this idx]    (long (doto-nth this buf chunk-size idx .getShort)))
   (get-int32 [this idx]    (long (doto-nth this buf chunk-size idx .getInt)))
@@ -305,7 +305,7 @@
             nil
             close-fn
             flush-fn)))))
-  
+
   (drop-bytes [this n]
     (loop [chunk this, to-drop n]
       (when-not (nil? chunk)
@@ -406,19 +406,19 @@
   [byte-seq options]
   (if-let [chunk-size (:chunk-size options)]
     (bytes/to-byte-buffers (.buf byte-seq) options)
-    [(.buf byte-seq)]))
+    [(.duplicate ^ByteBuffer (.buf byte-seq))]))
 
 (bytes/def-conversion [UnsafeByteSeq (bytes/seq-of ByteBuffer)]
   [byte-seq options]
   (if-let [chunk-size (:chunk-size options)]
     (bytes/to-byte-buffers (.buf byte-seq) options)
-    [(.buf byte-seq)]))
+    [(.duplicate ^ByteBuffer (.buf byte-seq))]))
 
 (bytes/def-conversion [ChunkedByteSeq (bytes/seq-of ByteBuffer)]
   [byte-seq options]
   (let [bufs (lazy-seq
                (cons
-                 (.buf byte-seq)
+                 (.duplicate ^ByteBuffer (.buf byte-seq))
                  (when-let [s (seq (next byte-seq))]
                    (bytes/to-byte-buffers s))))]
     (if-let [chunk-size (:chunk-size options)]

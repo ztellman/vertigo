@@ -43,21 +43,21 @@
   (b/to-chunked-byte-seq byte-seq {:chunk-size chunk-size}))
 
 (deftest test-roundtrip
-  (doseq [t (keys types)]
+  (doseq [t (take 1 (keys types))]
     (let [s (if (#{:float32 :float64} t)
               (map double (range 10))
               (range 10))
           [byte-size put-f get-f] (types t)]
-      
+
       ;; basic roundtrip
       (is (= s (repeatedly-get (repeatedly-put t s) t 10)))
-      
-      ;; chunked roundtrip 
+
+      ;; chunked roundtrip
       (doseq [i (range 1 10)]
         (is (= s (repeatedly-get
                    (->chunked (repeatedly-put t s) (* byte-size i))
                    t 10))))
-      
+
       ;; dropped roundtrip
       (is (= s (map
                  #(get-f
@@ -66,7 +66,7 @@
                       (* byte-size %))
                     0)
                  (range 10))))
-      
+
       ;; dropped chunked roundtrip
       (doseq [i (range 1 10)]
         (is (= s (map
