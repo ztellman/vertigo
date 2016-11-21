@@ -7,7 +7,7 @@
                  [clj-tuple "0.2.2"]
                  [byte-streams "0.2.0"]]
   :profiles {:dev {:dependencies [[criterium "0.4.3"]
-                                  [org.clojure/clojure "1.8.0-alpha4"]
+                                  [org.clojure/clojure "1.9.0-alpha14"]
                                   [codox-md "0.2.0" :exclusions [org.clojure/clojure]]]}
              :benchmark {:jvm-opts ["-Dvertigo.unsafe"]}}
   :plugins [[codox "0.6.4"]]
