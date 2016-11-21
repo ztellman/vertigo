@@ -1,6 +1,6 @@
 (ns vertigo.core
   (:refer-clojure
-    :exclude [get-in every? flush])
+    :exclude [get-in every? flush any?])
   (:use
     potemkin)
   (:require
